@@ -23,8 +23,12 @@ function findSecret(obj) {
 }
 async function register(env = process.env, request = fetch) {
   const body = registration(env);
-  const r = await request('https://api.x.ai/v2/phone-numbers', { method: 'POST', headers: { Authorization: `Bearer ${env.XAI_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
-  if (!r.ok) throw new Error(`Number registration failed: HTTP ${r.status}; response omitted to protect secrets. Do not retry blindly.`);
+  const r = await request('https://api.x.ai/v2/phone-numbers', { method: 'POST', headers: { Authorization: `Bearer ${env.XAI_API_KEY.trim()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
+  if (!r.ok) {
+    // Error bodies carry no signing secret; redact anything key-shaped just in case.
+    const detail = (await r.text().catch(() => '')).slice(0, 400).replace(/xai-[A-Za-z0-9_-]+/g, '[key]');
+    throw new Error(`Number registration failed: HTTP ${r.status}. xAI said: ${detail || '(nothing)'}`);
+  }
   const result = await r.json();
   const secret = findSecret(result);
   if (!secret) {
