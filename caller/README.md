@@ -1,6 +1,6 @@
 # Get Jobs Booked off-hours caller (draft, offline validated only)
 
-No calls have been placed. Default is explicit `--dry-run`; calling code is unreachable unless `--execute` plus all three validation gates are configured. Do not set those gates from this PR alone.
+No calls have been placed. Dry-run is the default (the explicit `--dry-run` flag is also accepted); calling code is unreachable unless `--execute` plus all three validation gates are configured. Do not set those gates from this PR alone.
 
 ## Run without dialing
 
@@ -13,7 +13,7 @@ npm test # existing demo-server tests
 (cd caller && npm test) # caller suite
 ```
 
-CSV columns: `business,phone,time_zone,posted_hours`. Phone is E.164, zone is an explicit IANA name. Hours are `24/7`, blank, or JSON such as `{"mon":["08:00-19:00"],"tue":["08:00-17:00"],"sun":[]}`. Quote JSON per normal CSV escaping; see example.csv. Multiple intervals and overnight intervals work. Omitted weekdays in a supplied schedule mean closed. Ambiguous prose hours fail validation instead of guessing. Normalize source listing hours before ingestion.
+CSV columns: `business,phone,time_zone,posted_hours`. Phone is E.164, zone is an explicit IANA name. Hours are `24/7`, blank, or JSON such as `{"mon":["08:00-19:00"],"tue":["08:00-17:00"],"sun":[]}`. Quote JSON per normal CSV escaping; see example.csv. Multiple intervals and overnight intervals work. Omitted weekdays in a supplied schedule mean closed. CSV posted_hours remains the strict caller format. For Google Maps / Apify imports, use the normalizer described below; unparseable source hours become the blank-hours default.
 
 Local calling window is [08:00,21:00), including weekends, intersected with closed hours. A 19:00 close becomes eligible at exactly 19:00. Blank hours use the approved default: weekends only within the calling window (never weekday evenings). 24/7 listings get one attempt within the window. Phoenix uses its IANA fixed offset. DST zones use actual local wall-clock time.
 
@@ -21,7 +21,7 @@ The scheduler spaces attempts at least 60/calls-per-hour minutes apart and distr
 
 ## Service / adapter
 
-Implemented carrier: **Twilio**, selected by `CALLER_CARRIER=twilio`; other values fail. Uses asynchronous carrier `DetectMessageEnd` AMD, with 20-second detection limit. Silent TwiML starts inbound-only live transcription, then Pause 20 seconds and Hangup. REST `TimeLimit=20` independently caps connected call time; ringing timeout is 20 seconds. There is no Say, Play, Record, Gather, agent audio or message. No recording is requested. Person/fax/unknown AMD and machine-end events trigger REST hangup immediately upon detection; AI/answering-service or full-mailbox speech detection also hangs up. Provider detection/HTTP latency means this is not literally instantaneous at answer.
+Implemented carrier: **Twilio**, selected by `CALLER_CARRIER=twilio`; other values fail. Uses asynchronous carrier `Enable` AMD so the machine decision arrives at `machine_start`, rather than waiting for the greeting to end. Initial TwiML contains only Pause 20 seconds and Hangup, with no transcription. Only the first machine AMD decision starts inbound-only live transcription through the Calls Transcriptions REST subresource. Human, fax, unknown and unexpected results hang up without ever requesting transcription; repeated/late AMD callbacks cannot reverse that decision or start another stream. Transcription startup errors hang up without retry. REST `TimeLimit=20` independently caps connected call time; ringing timeout is 20 seconds. There is no Say, Play, Record, Gather, agent audio or message. No recording is requested. Person/fax/unknown AMD triggers REST hangup immediately upon detection; any recognized voicemail/AI classification also hangs up after dropping all transcript references. Callback text fields are removed before classification, and parsed text references are cleared immediately afterward, before any asynchronous hangup. No transcript is retained in active state, files or logs. No IntelligenceService persistence or raw provider-data callback is requested. Provider detection/HTTP latency means this is not literally instantaneous at answer.
 
 Required env for a separately approved controlled test: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, CALLER_ID (a real account-authorized callback number), CALLER_WEBHOOK_URL (public HTTPS base path), CALLER_STATE_DIR (durable directory), CALLER_PORT (default 3001), CALLER_CALLS_PER_HOUR (default 4). Service binds loopback; a separately configured TLS reverse proxy must forward the public webhook path. It verifies Twilio's request signature using the configured external origin, not untrusted forwarded headers. No account settings are changed by starting the service. The service must stay running while callbacks arrive; SIGTERM stops scheduling and attempts to hang up active calls.
 
@@ -60,4 +60,25 @@ References checked 2026-10-30:
 
 ## Validation completed
 
-2026-10-30: 19 caller tests passed; existing root npm test passed. Fictional three-business dry run scheduled three calls across the horizon, zero unscheduled, without initializing a carrier or writing state. All carrier requests in tests were injected mocks.
+2026-10-30: 29 caller tests passed; existing root npm test passed. Fictional three-business dry run scheduled three calls across the horizon, zero unscheduled, without initializing a carrier or writing state. All carrier requests in tests were injected mocks.
+
+## Google Maps / Apify hours normalization
+
+`require('./caller/normalize-hours').normalizeHours(openingHours)` returns the caller's JSON weekday-interval string, `24/7`, or an empty string. Supported inputs include:
+
+- Google strings: `["Monday: 7 AM to 6 PM", "Sunday: Closed"]`, including Unicode dash/space variants.
+- Apify objects: `[{"day":"Monday","hours":"7 AM to 6 PM"},{"day":"Sunday","hours":"Closed"}]`.
+- Google wrappers `weekdayDescriptions` / `weekday_text`, an `openingHours` wrapper, day-to-hours maps, newline-separated weekday strings, or JSON-serialized versions.
+- Split shifts, overnight ranges, 12-hour AM/PM, unambiguous 24-hour HH:MM, noon and midnight. A per-day Open 24 hours remains a day-specific open interval; only seven such days become the special 24/7 exception.
+
+Missing/malformed/ambiguous entries or duplicate weekdays discard the entire source schedule to blank hours (weekends only), never a partial parse. Do not infer AM/PM from an ambiguous range. Omitted weekdays in an otherwise valid supplied schedule retain the caller's existing meaning: closed. A standalone Closed without a weekday cannot establish a schedule and falls back to blank hours.
+
+To normalize and schedule an array of imports in one dry run:
+
+```sh
+node caller/index.js input.json --opening-hours-json
+```
+
+Each JSON row needs `business`, E.164 `phone`, `time_zone`, and `openingHours`. No `--execute` means dry-run even when live-gate environment variables are present; contradictory `--dry-run --execute` is rejected. The command creates no state and does not initialize the carrier. Normalized source hours are included in the proposed schedule on stdout only.
+
+REST transcription source checked 2026-10-30: https://www.twilio.com/docs/voice/api/realtime-transcription-resource . No live transcription or call was started for this update. Existing uncertain-classification and restart-recovery gaps remain open.

@@ -5,8 +5,7 @@ function verify(url,params,signature,token){
  const a=Buffer.from(createHmac('sha1',token).update(signed).digest('base64')),b=Buffer.from(signature);
  return a.length===b.length&&timingSafeEqual(a,b);
 }
-function xml(s){return String(s).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');}
-function silentTwiml(callback){return `<Response><Start><Transcription track="inbound_track" statusCallbackUrl="${xml(callback)}" /></Start><Pause length="20"/><Hangup/></Response>`;}
+function silentTwiml(){return '<Response><Pause length="20"/><Hangup/></Response>';}
 function carrier(env,request=fetch){
  if(env.CALLER_CARRIER!=='twilio')throw Error('Set CALLER_CARRIER=twilio (only implemented carrier)');
  const {TWILIO_ACCOUNT_SID:account,TWILIO_AUTH_TOKEN:token,CALLER_ID:from,CALLER_WEBHOOK_URL:base}=env;
@@ -17,7 +16,8 @@ function carrier(env,request=fetch){
  return {
   hook,
   verify:(path,params,sig)=>verify(u.origin+path,params,sig,token),
-  dial:(row)=>api('Calls.json',{To:row.phone,From:from,MachineDetection:'DetectMessageEnd',MachineDetectionTimeout:'20',AsyncAmd:'true',AsyncAmdStatusCallback:hook(row.id,'amd'),Twiml:silentTwiml(hook(row.id,'speech')),StatusCallback:hook(row.id,'status'),StatusCallbackEvent:'completed',Timeout:'20',TimeLimit:'20',Record:'false'}),
+  dial:(row)=>api('Calls.json',{To:row.phone,From:from,MachineDetection:'Enable',MachineDetectionTimeout:'20',AsyncAmd:'true',AsyncAmdStatusCallback:hook(row.id,'amd'),Twiml:silentTwiml(),StatusCallback:hook(row.id,'status'),StatusCallbackEvent:'completed',Timeout:'20',TimeLimit:'20',Record:'false'}),
+  startTranscription:(sid,id)=>{if(!/^CA[0-9a-f]{32}$/i.test(sid||'')||!/^[a-f0-9]{64}$/.test(id||''))throw Error('Invalid call identity');return api(`Calls/${sid}/Transcriptions.json`,{Track:'inbound_track',StatusCallbackUrl:hook(id,'speech'),StatusCallbackMethod:'POST',PartialResults:'true',EnableProviderData:'false'});},
   hangup:sid=>{if(!/^CA[0-9a-f]{32}$/i.test(sid||''))throw Error('Invalid call SID');return api(`Calls/${sid}.json`,{Status:'completed'});}
  };
 }

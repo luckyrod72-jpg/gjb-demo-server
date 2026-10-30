@@ -13,16 +13,28 @@ class Caller {
   catch{state.error=true;return {blocked:'Carrier submission ambiguous; claim retained; inspect account manually, do not retry'};}
  }
  async event(id,event,data){
-  const s=this.active.get(id);if(!s)return;const sid=data.CallSid;
-  if(s.sid&&sid!==s.sid)return;if(!s.sid&&sid)s.sid=sid;
+  const s=this.active.get(id);if(!s){delete data.TranscriptionData;return;}const sid=data.CallSid;
+  if(s.sid&&sid!==s.sid){delete data.TranscriptionData;return;}if(!s.sid&&sid)s.sid=sid;
   if(event==='speech'){
-   let text='';try{text=JSON.parse(data.TranscriptionData||'{}').transcript||'';}catch{}
-   const label=speech(text,s.business); // transient; neither data nor text is stored
-   if(label){s.label=label;if(['AI or answering service answered','Voicemail full'].includes(label))await this.stop(s);}
+   // Remove the raw callback field immediately, including rejected/late callbacks.
+   let raw=data.TranscriptionData; delete data.TranscriptionData;
+   if(s.answeredBy!=='machine_start'||!s.transcriptionRequested||s.stopping){raw=null;return;}
+   let text='',label;
+   try { text=JSON.parse(raw||'{}').transcript||''; label=speech(text,s.business); }
+   catch {} finally { text=null; raw=null; }
+   // Only the derived label survives classification; no transcript in state/logs/files.
+   if(label){s.label=label;await this.stop(s);}
   }
   if(event==='amd'){
-   s.answeredBy=data.AnsweredBy;
-   if(data.AnsweredBy==='human'||data.AnsweredBy==='fax'||data.AnsweredBy==='unknown'||String(data.AnsweredBy).startsWith('machine_end'))await this.stop(s);
+   // First authenticated AMD decision wins; retries cannot start a second stream
+   // or reverse a person/fax/unknown decision after hangup.
+   if(s.answeredBy!==null)return;
+   s.answeredBy=data.AnsweredBy||'unknown';
+   if(s.answeredBy==='machine_start'&&!s.stopping&&!s.finalizing){
+    s.transcriptionRequested=true;
+    try { await this.carrier.startTranscription(s.sid,id); }
+    catch { s.transcriptionFailed=true; await this.stop(s); }
+   } else { await this.stop(s); }
   }
   if(event==='status'&&['completed','busy','no-answer','failed','canceled'].includes(data.CallStatus)){
    if(s.finalizing)return;s.finalizing=true;
