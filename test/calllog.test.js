@@ -75,3 +75,14 @@ test('Postgres call log against a real database (set TEST_DATABASE_URL to run)',
   assert.equal(await db.claimAlert(example.id, '2026-11', 80), false);
   await pool.query('DROP TABLE calls, usage_alerts'); await db.close();
 });
+
+test('the owner email goes out before the call log, and a broken log never blocks it', async () => {
+  class Socket extends EventEmitter { constructor() { super(); this.sent = []; } send(x) { this.sent.push(JSON.parse(x)); } terminate() {} }
+  const order = []; const errors = [];
+  const ws = joinCall('call-10', { ...example, ownerEmail: 'o@example.com' }, { Socket, log: { ...quiet, error: m => errors.push(m) },
+    mail: async () => { order.push('email'); return { sent: true }; }, onEnd: async () => { order.push('log'); throw new Error('db down'); } });
+  ws.emit('open'); ws.emit('message', Buffer.from('{"type":"session.updated"}'));
+  ws.emit('message', Buffer.from(JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'hi' })));
+  ws.emit('close'); await new Promise(r => setTimeout(r, 5));
+  assert.deepEqual(order, ['email', 'log']); assert.match(errors.join(), /db down/);
+});
