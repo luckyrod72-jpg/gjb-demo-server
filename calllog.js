@@ -2,14 +2,14 @@
 // Neon project) so it survives restarts and deploys. Without DATABASE_URL it falls
 // back to memory and says so in the logs: fine for tests and local runs, not for
 // customers (history is lost on every restart).
-const { monthKey, isAfterHours } = require("./hours");
+const { periodKey, isAfterHours } = require("./hours");
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS calls (
   call_id          text PRIMARY KEY,
   customer_id      text NOT NULL,
   demo             boolean NOT NULL DEFAULT false,
-  month            text NOT NULL,          -- YYYY-MM in the customer's time zone
+  month            text NOT NULL,          -- billing period start YYYY-MM-DD (signup-day cycle, customer's time zone)
   started_at       timestamptz NOT NULL,
   ended_at         timestamptz NOT NULL,
   duration_seconds integer NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS report_sends (
 function callRow({ callId, customer, startedAt, endedAt, job }) {
   const start = new Date(startedAt), end = new Date(endedAt);
   return {
-    callId, customerId: customer.id, demo: !!customer.demo, month: monthKey(start, customer.timezone),
+    callId, customerId: customer.id, demo: !!customer.demo, month: periodKey(start, customer),
     startedAt: start.toISOString(), endedAt: end.toISOString(),
     durationSeconds: Math.max(0, Math.round((end - start) / 1000)),
     jobCaptured: !!job, urgency: job?.urgency || null, afterHours: isAfterHours(customer, start),

@@ -18,8 +18,8 @@ async function seeded() {
 }
 
 test('report counts calls, jobs, emergencies, after-hours and minutes, and never claims booking', async () => {
-  const r = buildReport(example, '2026-11', await (await seeded()).monthStats(example.id, '2026-11'));
-  assert.equal(r.subject, 'Saguaro Plumbing Co: your November 2026 call report');
+  const r = buildReport(example, '2026-11', await (await seeded()).monthStats(example.id, '2026-11-01'));
+  assert.equal(r.subject, 'Saguaro Plumbing Co: your call report (November 2026)');
   for (const line of ['Calls answered: 3', 'Job requests captured: 2', 'Emergencies flagged: 1', 'After-hours calls: 2', 'Job requests captured after hours: 1', 'Minutes used: 6 of 750'])
     assert.ok(r.text.includes(line), line);
   assert.match(r.text, /doesn't book appointments/);
@@ -38,7 +38,7 @@ test('reports go out on the 1st after 8am local, once, only to live customers, o
   assert.deepEqual(await run('2026-12-01T16:00:00Z', {}), []);           // disabled
   assert.deepEqual(await run('2026-12-01T14:30:00Z'), []);               // 7:30am Phoenix: too early
   assert.deepEqual(await run('2026-12-02T16:00:00Z'), []);               // the 2nd
-  assert.deepEqual(await run('2026-12-01T16:00:00Z'), [{ id: example.id, month: '2026-11' }]);
+  assert.deepEqual(await run('2026-12-01T16:00:00Z'), [{ id: example.id, month: '2026-11-01' }]);
   assert.deepEqual(await run('2026-12-01T17:00:00Z'), []);               // already sent
   assert.equal(sent.length, 1); assert.equal(sent[0].o.to, example.ownerEmail); assert.match(sent[0].s.text, /Calls answered: 3/);
 });
@@ -57,4 +57,25 @@ test('report tracking in real Postgres (TEST_DATABASE_URL)', { skip: !process.en
   assert.equal(await db.claimReport('a', '2026-11'), true); assert.equal(await db.claimReport('a', '2026-11'), false);
   await db.releaseReport('a', '2026-11'); assert.equal(await db.claimReport('a', '2026-11'), true);
   await pool.query('DROP TABLE calls, usage_alerts, report_sends'); await db.close();
+});
+
+test('billing periods follow the signup day; reports go out on the new period start', async () => {
+  const { periodKey, periodLabel } = require('../hours');
+  const c = { ...example, createdAt: '2026-10-15T19:00:00Z' }; // Oct 15 locally
+  assert.equal(periodKey(new Date('2026-11-14T19:00:00Z'), c), '2026-10-15');
+  assert.equal(periodKey(new Date('2026-11-15T19:00:00Z'), c), '2026-11-15');
+  assert.equal(periodLabel('2026-10-15', c), 'Oct 15 – Nov 14, 2026');
+  const end = { ...example, createdAt: '2026-01-31T19:00:00Z' };
+  assert.equal(periodKey(new Date('2026-02-28T19:00:00Z'), end), '2026-02-28'); // short month clamps
+  const log = memoryLog(); const sent = [];
+  await log.record(callRow({ callId: 'p1', customer: c, startedAt: Date.parse('2026-11-01T17:00:00Z'), endedAt: Date.parse('2026-11-01T17:02:00Z'), job: { urgency: 'routine' } }));
+  const run = iso => sendDueReports({ customers: store([c]), callLog: log, mail: async s => (sent.push(s), { sent: true }), env: { REPORTS_ENABLED: 'true' }, now: new Date(iso), log: quiet });
+  assert.deepEqual(await run('2026-12-01T16:00:00Z'), []); // the 1st is no longer special
+  assert.deepEqual(await run('2026-11-15T16:00:00Z'), [{ id: c.id, month: '2026-10-15' }]);
+  assert.match(sent[0].subject, /Oct 15 – Nov 14, 2026/);
+});
+
+test('report shows overage at $0.60/min when over plan', () => {
+  const r = buildReport(example, '2026-11-01', { calls: 1, seconds: 760 * 60, jobs: 0, emergencies: 0, afterHours: 0, afterHoursJobs: 0 });
+  assert.match(r.text, /Minutes over plan: 10 × \$0\.60 = \$6\.00/);
 });

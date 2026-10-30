@@ -99,3 +99,13 @@ test('webhook routing: dialed number picks the customer; paused customers are hu
   assert.equal(routeCall(evt('+16025550199'), store).action, 'ignore');
   assert.equal(routeCall({ type: 'realtime.call.ended' }, store).action, 'ignore');
 });
+
+test('real customers greet as the contractor\'s own virtual receptionist; demos keep the GJB greeting', () => {
+  const { buildInstructions } = require('../instructions');
+  const ex = require('../docs/customer.example.json');
+  const real = buildInstructions(ex);
+  assert.match(real, /"Thanks for calling Saguaro Plumbing Co, this is the virtual receptionist\. How can I help you today\?"/);
+  assert.doesNotMatch(real, /Get Jobs Booked AI receptionist/);
+  const demo = buildInstructions(require('../customers/demo-copperline-plumbing.json'));
+  assert.match(demo, /this is the Get Jobs Booked AI receptionist/);
+});

@@ -56,8 +56,10 @@ function sharedRules(c) {
   const [intro, ...rest] = shared.slice(0, cut).split("\n\n");
   if (!/DEMO line/.test(intro)) throw new Error("kb/shared.md: expected the demo intro as the first paragraph");
   const area = c.serviceArea.join(", ");
-  const newIntro = `You are the Get Jobs Booked AI receptionist for [BUSINESS NAME], a [TRADE] company serving ${area}. Callers are this business's real customers and prospects.`;
+  // Rod, 2026-10-30: real customers' callers hear the contractor's own virtual receptionist (no GJB branding).
+  const newIntro = `You are the virtual receptionist for [BUSINESS NAME], a [TRADE] company serving ${area}. Callers are this business's real customers and prospects.`;
   return [newIntro, ...rest].join("\n\n")
+    .replace('"Thanks for calling [BUSINESS NAME], this is the Get Jobs Booked AI receptionist. How can I help you today?"', '"Thanks for calling [BUSINESS NAME], this is the virtual receptionist. How can I help you today?"')
     .replace("[within 15 minutes for emergencies / by 9am next business day otherwise]", `[${c.callbackEmergency} for emergencies / ${c.callbackRoutine} otherwise]`)
     .replaceAll("[BUSINESS NAME]", c.business)
     .replaceAll("[TRADE]", TRADE_LABEL[c.trade]);

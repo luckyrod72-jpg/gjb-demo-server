@@ -18,7 +18,7 @@ test('after-hours and month use the customer time zone', () => {
 
 test('callRow captures duration, job, urgency and after-hours', () => {
   const r = callRow({ callId: 'c1', customer: example, startedAt: Date.parse('2026-11-07T17:00:00Z'), endedAt: Date.parse('2026-11-07T17:03:05Z'), job: { urgency: 'emergency' } });
-  assert.deepEqual({ ...r }, { callId: 'c1', customerId: example.id, demo: false, month: '2026-11', startedAt: '2026-11-07T17:00:00.000Z', endedAt: '2026-11-07T17:03:05.000Z',
+  assert.deepEqual({ ...r }, { callId: 'c1', customerId: example.id, demo: false, month: '2026-11-01', startedAt: '2026-11-07T17:00:00.000Z', endedAt: '2026-11-07T17:03:05.000Z',
     durationSeconds: 185, jobCaptured: true, urgency: 'emergency', afterHours: true });
   assert.equal(callRow({ callId: 'c2', customer: example, startedAt: 0, endedAt: 1000, job: null }).jobCaptured, false);
 });
@@ -34,7 +34,9 @@ test('Rod gets one email at 80% and one at 100%, never repeats, never for demo l
   assert.equal(await add('c', 60), null);                      // still 80s, already sent
   assert.equal((await add('d', 150 * 60)).level, 100);         // 751
   assert.equal(await add('e', 600), null);
-  assert.equal(sent.length, 2); assert.equal(sent[0].o.to, 'rod@example.com'); assert.match(sent[1].s.subject, /Over plan.*751\/750/);
+  const rod = sent.filter(x => x.o.to === 'rod@example.com'), owner = sent.filter(x => x.o.to === example.ownerEmail);
+  assert.equal(rod.length, 2); assert.match(rod[1].s.subject, /Over plan.*751\/750/); assert.match(rod[1].s.text, /\$0\.60/);
+  assert.equal(owner.length, 1, 'owner gets one heads-up at 80%'); assert.match(owner[0].s.text, /every call keeps getting answered/);
   // A single call that jumps straight past 100% sends only the 100% email.
   const log2 = memoryLog(); sent.length = 0;
   await log2.record({ callId: 'x', customerId: example.id, month: '2026-11', durationSeconds: 800 * 60 });
