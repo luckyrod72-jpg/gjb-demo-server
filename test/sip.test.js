@@ -17,7 +17,7 @@ test('signature rejects malformed/stale/future timestamps and unknown versions',
   assert.equal(verifySignature('body', h, ['other','key']), true);
 });
 class Socket extends EventEmitter { constructor() { super(); this.sent=[]; } send(x) {this.sent.push(JSON.parse(x));} terminate(){this.ended=true;} }
-const line = { business:'Fixture Roofing', trade:'roofing' };
+const line = { business:'Fixture Roofing', trade:'roofing', demo:true };
 const quiet = { error() {} };
 test('session uses documented fields and greets only after session.updated', () => {
  const ws = joinCall('fixture', line, {Socket, log:quiet}); ws.emit('open');

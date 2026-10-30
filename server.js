@@ -6,10 +6,9 @@
 // only steers the session.
 const express = require("express");
 const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
 const WebSocket = require("ws");
-const LINES = require("./lines");
+const { createStore } = require("./customers");
+const { buildInstructions } = require("./instructions");
 const { SAVE_JOB_TOOL, buildSummary, sendSummary } = require("./summary");
 
 const XAI_API_KEY = process.env.XAI_API_KEY;
@@ -22,8 +21,7 @@ const TOLERANCE_SECONDS = 300;
 if (!XAI_API_KEY) console.warn("[warn] XAI_API_KEY is not set");
 if (!WEBHOOK_SECRETS.length) console.warn("[warn] XAI_WEBHOOK_SECRET(S) not set: webhooks will be rejected");
 
-const SHARED = fs.readFileSync(path.join(__dirname, "kb", "shared.md"), "utf8");
-const kbFor = trade => fs.readFileSync(path.join(__dirname, "kb", `${trade}.md`), "utf8");
+const customers = createStore();
 
 // Standard Webhooks style verification: HMAC-SHA256 over `${id}.${timestamp}.${body}`.
 // Standard Webhooks v1: versioned base64 signatures and a bounded integer timestamp.
@@ -56,6 +54,13 @@ function dialedNumber(sipHeaders = []) {
   return m ? `+1${m[1]}` : null;
 }
 
+async function hangup(callId, { request = fetch, log = console } = {}) {
+  try {
+    const r = await request(`https://api.x.ai/v1/realtime/calls/${encodeURIComponent(callId)}/hangup`, { method: "POST", headers: { Authorization: `Bearer ${XAI_API_KEY}` }, signal: AbortSignal.timeout(5000) });
+    if (!r.ok) log.error(`[call] hangup failed (${r.status})`);
+  } catch { log.error("[call] hangup unavailable; carrier timeout must clear call"); }
+}
+
 function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs = 10000, log = console, env = process.env, mail = sendSummary } = {}) {
   let ws, ready = false, failed = false, finished = false;
   const startedAt = Date.now();
@@ -78,16 +83,13 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
     clearTimeout(timer);
     log.error("[call] WebSocket join/session failed; ending SIP call");
     try { ws?.terminate(); } catch {}
-    try {
-      const r = await request(`https://api.x.ai/v1/realtime/calls/${encodeURIComponent(callId)}/hangup`, { method: "POST", headers: { Authorization: `Bearer ${XAI_API_KEY}` }, signal: AbortSignal.timeout(5000) });
-      if (!r.ok) log.error(`[call] hangup failed (${r.status})`);
-    } catch { log.error("[call] hangup unavailable; carrier timeout must clear call"); }
+    await hangup(callId, { request, log });
   };
   const timer = setTimeout(fail, timeoutMs);
   timer.unref?.();
-  const instructions = SHARED
-    .replaceAll("[BUSINESS NAME]", line.business)
-    .replaceAll("[TRADE]", line.trade) + "\n\n" + kbFor(line.trade);
+  let instructions;
+  try { instructions = buildInstructions(line); }
+  catch (e) { log.error(`[call ${callId}] could not build instructions: ${e.message}`); void fail(); return null; }
   try { ws = new Socket(`wss://api.x.ai/v1/realtime?call_id=${encodeURIComponent(callId)}`, {
     headers: { Authorization: `Bearer ${XAI_API_KEY}` }
   });
@@ -126,8 +128,22 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
   return ws;
 }
 
+// Decides what to do with a verified webhook event. Paused customers are not answered.
+function routeCall(evt, store) {
+  if (evt.type !== "realtime.call.incoming") return { action: "ignore", reason: `ignored ${evt.type}` };
+  const callId = evt.data && evt.data.call_id;
+  const num = dialedNumber(evt.data && evt.data.sip_headers);
+  const line = num ? store.byNumber(num) : null;
+  if (!callId || !line) return { action: "ignore", reason: `no line for ${num} (call ${callId})` };
+  if (line.status === "paused") return { action: "hangup", callId, reason: `${line.id} is paused; not answering (call ${callId})` };
+  return { action: "join", callId, line };
+}
+
 const app = express();
-app.get("/health", (_req, res) => res.json({ ok: true, lines: Object.keys(LINES).length }));
+app.get("/health", (_req, res) => {
+  const all = customers.all();
+  res.json({ ok: true, lines: all.length, demo: all.filter(c => c.demo).length, customers: all.filter(c => !c.demo).length });
+});
 
 app.post("/webhooks/xai", express.raw({ type: "*/*", limit: "1mb" }), (req, res) => {
   const raw = req.body.toString("utf8");
@@ -138,14 +154,12 @@ app.post("/webhooks/xai", express.raw({ type: "*/*", limit: "1mb" }), (req, res)
   }
   let evt; try { evt = JSON.parse(raw); } catch { return res.status(400).send("bad json"); }
   res.status(200).send("ok"); // ack fast, then join
-  if (evt.type !== "realtime.call.incoming") return console.log(`[webhook] ignored ${evt.type}`);
-  const callId = evt.data && evt.data.call_id;
-  const num = dialedNumber(evt.data && evt.data.sip_headers);
-  const line = LINES[num];
-  if (!callId || !line) return console.warn(`[webhook] no line for ${num} (call ${callId})`);
-  joinCall(callId, line);
+  const r = routeCall(evt, customers);
+  if (r.action === "ignore") return console.log(`[webhook] ${r.reason}`);
+  if (r.action === "hangup") { console.warn(`[webhook] ${r.reason}`); return void hangup(r.callId); }
+  joinCall(r.callId, r.line);
 });
 
 if (require.main === module) app.listen(PORT, () => console.log(`GJB demo server on :${PORT}`));
-module.exports = { verifySignature, dialedNumber, joinCall };
+module.exports = { verifySignature, dialedNumber, joinCall, routeCall, app, customers };
 
