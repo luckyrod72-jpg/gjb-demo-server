@@ -25,15 +25,15 @@ const SHARED = fs.readFileSync(path.join(__dirname, "kb", "shared.md"), "utf8");
 const kbFor = trade => fs.readFileSync(path.join(__dirname, "kb", `${trade}.md`), "utf8");
 
 // Standard Webhooks style verification: HMAC-SHA256 over `${id}.${timestamp}.${body}`.
-// ASSUMPTION to confirm against xAI docs on first live call: the secret may carry a
-// "whsec_" prefix with a base64 key, and the signature header is "v1,<base64>" (space-separated list).
+// Standard Webhooks v1: versioned base64 signatures and a bounded integer timestamp.
 function verifySignature(rawBody, headers, secrets) {
   const id = headers["webhook-id"], ts = headers["webhook-timestamp"], sigHeader = headers["webhook-signature"];
-  if (!id || !ts || !sigHeader) return false;
+  if (![id, ts, sigHeader].every(v => typeof v === "string" && v.length > 0)) return false;
+  if (!/^\d+$/.test(ts) || !Number.isSafeInteger(Number(ts))) return false;
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - Number(ts)) > TOLERANCE_SECONDS) return false;
   const signed = `${id}.${ts}.${rawBody}`;
-  const provided = sigHeader.split(" ").map(s => s.split(",")[1] || s);
+  const provided = sigHeader.split(/\s+/).filter(s => s.startsWith("v1,")).map(s => s.slice(3));
   for (const secret of secrets) {
     const keys = [];
     if (secret.startsWith("whsec_")) keys.push(Buffer.from(secret.slice(6), "base64"));
@@ -55,30 +55,51 @@ function dialedNumber(sipHeaders = []) {
   return m ? `+1${m[1]}` : null;
 }
 
-function joinCall(callId, line) {
+function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs = 10000, log = console } = {}) {
+  let ws, ready = false, failed = false;
+  const fail = async () => {
+    if (failed) return;
+    failed = true;
+    clearTimeout(timer);
+    log.error("[call] WebSocket join/session failed; ending SIP call");
+    try { ws?.terminate(); } catch {}
+    try {
+      const r = await request(`https://api.x.ai/v1/realtime/calls/${encodeURIComponent(callId)}/hangup`, { method: "POST", headers: { Authorization: `Bearer ${XAI_API_KEY}` }, signal: AbortSignal.timeout(5000) });
+      if (!r.ok) log.error(`[call] hangup failed (${r.status})`);
+    } catch { log.error("[call] hangup unavailable; carrier timeout must clear call"); }
+  };
+  const timer = setTimeout(fail, timeoutMs);
+  timer.unref?.();
   const instructions = SHARED
     .replaceAll("[BUSINESS NAME]", line.business)
     .replaceAll("[TRADE]", line.trade) + "\n\n" + kbFor(line.trade);
-  const ws = new WebSocket(`wss://api.x.ai/v1/realtime?call_id=${encodeURIComponent(callId)}`, {
+  try { ws = new Socket(`wss://api.x.ai/v1/realtime?call_id=${encodeURIComponent(callId)}`, {
     headers: { Authorization: `Bearer ${XAI_API_KEY}` }
   });
+  } catch { void fail(); return null; }
   ws.on("open", () => {
+    if (failed) return;
+    try {
     ws.send(JSON.stringify({
       type: "session.update",
       session: { voice: VOICE, instructions, turn_detection: { type: "server_vad" } }
     }));
-    ws.send(JSON.stringify({ type: "response.create" })); // agent speaks the greeting first
-    console.log(`[call ${callId}] joined as ${line.business}`);
+    } catch { void fail(); }
   });
   ws.on("message", buf => {
     try {
       const ev = JSON.parse(buf.toString());
-      if (ev.type === "error") console.error(`[call ${callId}] error`, JSON.stringify(ev));
+      if (ev.type === "session.updated" && !ready && !failed) {
+        ready = true; clearTimeout(timer);
+        try { ws.send(JSON.stringify({ type: "response.create" })); } catch { void fail(); }
+      }
+      if (ev.type === "error") void fail();
       else if (/^(session\.|response\.done|conversation\.item\.created)/.test(ev.type)) console.log(`[call ${callId}] ${ev.type}`);
     } catch { /* ignore non-JSON */ }
   });
-  ws.on("close", code => console.log(`[call ${callId}] closed (${code})`));
-  ws.on("error", err => console.error(`[call ${callId}] ws error`, err.message));
+  ws.on("close", () => { clearTimeout(timer); if (!ready) void fail(); });
+  ws.on("error", () => { void fail(); });
+  return ws;
 }
 
 const app = express();
@@ -101,4 +122,5 @@ app.post("/webhooks/xai", express.raw({ type: "*/*", limit: "1mb" }), (req, res)
 });
 
 if (require.main === module) app.listen(PORT, () => console.log(`GJB demo server on :${PORT}`));
-module.exports = { verifySignature, dialedNumber };
+module.exports = { verifySignature, dialedNumber, joinCall };
+
