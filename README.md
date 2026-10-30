@@ -25,6 +25,7 @@ Steers the Grok voice agent for the four Get Jobs Booked demo lines. Audio flows
 - Instructions: demo customers get `kb/shared.md` + `kb/<trade>.md` exactly as before. Real customers keep the shared rules but get their own service area, hours, services, prices, emergency policy, scheduling, callback times and FAQs; demo prices, demo services and demo FAQs are never included. Only the trade file's EMERGENCIES (safety) section carries over, with the customer's utilities.
 - `status: "paused"` stops answering that number (the call is hung up). `trial`/`active` answer normally.
 - Register a customer's number: `node scripts/reg.js <customer-id>` (a trade name still means that trade's demo line).
+- New customer: `/admin/intake` (Basic auth; password = `ADMIN_TOKEN` env, any username; admin is off when unset). `/admin/customers` lists them. Step-by-step: `docs/NEW-CUSTOMER-SETUP.md`.
 
 ## Open items to verify on the first live call
 - Webhook signature scheme (implemented as Standard Webhooks HMAC-SHA256 `id.timestamp.body`; test in `test/`).

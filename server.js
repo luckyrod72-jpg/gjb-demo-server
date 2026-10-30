@@ -9,6 +9,7 @@ const crypto = require("crypto");
 const WebSocket = require("ws");
 const { createStore } = require("./customers");
 const { buildInstructions } = require("./instructions");
+const { adminRouter } = require("./admin");
 const { SAVE_JOB_TOOL, buildSummary, sendSummary } = require("./summary");
 
 const XAI_API_KEY = process.env.XAI_API_KEY;
@@ -140,6 +141,7 @@ function routeCall(evt, store) {
 }
 
 const app = express();
+app.use("/admin", adminRouter({ store: customers }));
 app.get("/health", (_req, res) => {
   const all = customers.all();
   res.json({ ok: true, lines: all.length, demo: all.filter(c => c.demo).length, customers: all.filter(c => !c.demo).length });
