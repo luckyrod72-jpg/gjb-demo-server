@@ -1,0 +1,10 @@
+const assert = require("assert");
+const crypto = require("crypto");
+const { verifySignature, dialedNumber } = require("../server");
+const secret = "whsec_" + Buffer.from("testkey123").toString("base64");
+const id = "msg_1", ts = String(Math.floor(Date.now() / 1000)), body = '{"type":"realtime.call.incoming"}';
+const sig = crypto.createHmac("sha256", Buffer.from("testkey123")).update(`${id}.${ts}.${body}`).digest("base64");
+assert.ok(verifySignature(body, { "webhook-id": id, "webhook-timestamp": ts, "webhook-signature": `v1,${sig}` }, [secret]));
+assert.ok(!verifySignature(body + "x", { "webhook-id": id, "webhook-timestamp": ts, "webhook-signature": `v1,${sig}` }, [secret]));
+assert.strictEqual(dialedNumber([{ name: "To", value: "<sip:+17026028867@sip.voice.x.ai>" }]), "+17026028867");
+console.log("all tests passed");

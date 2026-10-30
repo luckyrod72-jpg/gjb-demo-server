@@ -1,0 +1,11 @@
+{
+  "name": "gjb-demo-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Get Jobs Booked demo lines: receives xAI SIP call webhooks and configures the Grok voice agent per trade.",
+  "main": "server.js",
+  "type": "commonjs",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server.js", "test": "node test/signature.test.js" },
+  "dependencies": { "express": "^4.19.2", "ws": "^8.17.1" }
+}
