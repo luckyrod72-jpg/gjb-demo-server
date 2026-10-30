@@ -8,6 +8,7 @@ Steers the Grok voice agent for the four Get Jobs Booked demo lines. Audio flows
    - `XAI_API_KEY`
    - `XAI_WEBHOOK_SECRETS`: comma-separated, one webhook signing secret per registered number. xAI shows each secret ONCE, at registration.
    - optional `XAI_VOICE` (default `ara`)
+   - Call summaries (email after every call): `RESEND_API_KEY`, `SUMMARY_FROM` (a sender on a Resend-verified domain), `SUMMARY_TO` (fallback recipient; a line's `ownerEmail` in `lines.js` wins)
 3. Health check: `GET /health`. Webhook URL to give xAI: `https://<service>.onrender.com/webhooks/xai`
 
 ## Wire each number

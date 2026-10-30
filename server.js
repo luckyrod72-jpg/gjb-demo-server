@@ -10,6 +10,7 @@ const fs = require("fs");
 const path = require("path");
 const WebSocket = require("ws");
 const LINES = require("./lines");
+const { SAVE_JOB_TOOL, buildSummary, sendSummary } = require("./summary");
 
 const XAI_API_KEY = process.env.XAI_API_KEY;
 const WEBHOOK_SECRETS = (process.env.XAI_WEBHOOK_SECRETS || process.env.XAI_WEBHOOK_SECRET || "")
@@ -55,8 +56,22 @@ function dialedNumber(sipHeaders = []) {
   return m ? `+1${m[1]}` : null;
 }
 
-function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs = 10000, log = console } = {}) {
-  let ws, ready = false, failed = false;
+function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs = 10000, log = console, env = process.env, mail = sendSummary } = {}) {
+  let ws, ready = false, failed = false, finished = false;
+  const startedAt = Date.now();
+  let job = null;
+  const transcript = [];
+  const finish = async () => {
+    if (finished || !ready) return;
+    finished = true;
+    const endedAt = Date.now();
+    log.log?.(`[call ${callId}] ended after ${Math.round((endedAt - startedAt) / 1000)}s (${line.business}); job captured: ${!!job}`);
+    if (!job && !transcript.some(t => t.role === "caller")) return; // silent/hang-up call: nothing to report
+    try {
+      const summary = buildSummary({ line, job, transcript, startedAt, endedAt, callId });
+      await mail(summary, { to: line.ownerEmail || env.SUMMARY_TO, env, request, log });
+    } catch (e) { log.error(`[summary] failed: ${e.message}`); }
+  };
   const fail = async () => {
     if (failed) return;
     failed = true;
@@ -82,7 +97,7 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
     try {
     ws.send(JSON.stringify({
       type: "session.update",
-      session: { voice: VOICE, instructions, turn_detection: { type: "server_vad" } }
+      session: { voice: VOICE, instructions, turn_detection: { type: "server_vad" }, tools: [SAVE_JOB_TOOL] }
     }));
     } catch { void fail(); }
   });
@@ -93,11 +108,20 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
         ready = true; clearTimeout(timer);
         try { ws.send(JSON.stringify({ type: "response.create" })); } catch { void fail(); }
       }
-      if (ev.type === "error") void fail();
+      if (ev.type === "response.function_call_arguments.done" && ev.name === SAVE_JOB_TOOL.name) {
+        try { job = { ...(job || {}), ...JSON.parse(ev.arguments || "{}") }; } catch { /* keep previous */ }
+        try {
+          ws.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: ev.call_id, output: JSON.stringify({ saved: true }) } }));
+          ws.send(JSON.stringify({ type: "response.create" }));
+        } catch { /* call may be ending */ }
+      }
+      if (ev.type === "conversation.item.input_audio_transcription.completed" && ev.transcript) transcript.push({ role: "caller", text: String(ev.transcript).trim() });
+      if (ev.type === "response.output_audio_transcript.done" && ev.transcript) transcript.push({ role: "agent", text: String(ev.transcript).trim() });
+      if (ev.type === "error") { if (!ready) void fail(); else log.error(`[call ${callId}] realtime error: ${ev.error?.message || "unknown"}`); }
       else if (/^(session\.|response\.done|conversation\.item\.created)/.test(ev.type)) console.log(`[call ${callId}] ${ev.type}`);
     } catch { /* ignore non-JSON */ }
   });
-  ws.on("close", () => { clearTimeout(timer); if (!ready) void fail(); });
+  ws.on("close", () => { clearTimeout(timer); if (!ready) void fail(); else void finish(); });
   ws.on("error", () => { void fail(); });
   return ws;
 }
