@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Get Jobs Booked — AI receptionist for contractors</title>
+<meta name="description" content="An AI receptionist that answers your roofing, HVAC, plumbing or electrical company's calls 24/7 and emails you every job request right after the call. Call a demo line now.">
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f4f6f8; --ink: #14202e; --muted: #556270; --line: #dfe4ea;
+    --brand: #0b5cad; --brand-ink: #ffffff; --accent: #f2a516; --ok: #1f7a3f; --soon: #8a96a3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1720; --surface: #17222e; --ink: #e8eef4; --muted: #9fb0c0; --line: #263545; --brand: #4c9be8; --brand-ink: #08121c; --accent: #f2b33d; --ok: #4cc27a; --soon: #6f7e8c; }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  a { color: var(--brand); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; }
+  .logo { font-weight: 800; letter-spacing: -0.02em; font-size: 20px; color: var(--ink); text-decoration: none; }
+  .logo span { color: var(--brand); }
+  .btn { display: inline-block; padding: 14px 22px; border-radius: 10px; font-weight: 700; text-decoration: none; text-align: center; border: 2px solid var(--brand); }
+  .btn-primary { background: var(--brand); color: var(--brand-ink); }
+  .btn-ghost { color: var(--brand); background: transparent; }
+  .btn-sm { padding: 8px 14px; font-size: 15px; }
+  .hero { padding: 40px 0 56px; }
+  .eyebrow { color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; font-size: 13px; margin: 0 0 10px; }
+  h1 { font-size: clamp(32px, 6vw, 54px); line-height: 1.08; letter-spacing: -0.03em; margin: 0 0 18px; max-width: 18ch; }
+  .lede { font-size: 19px; color: var(--muted); max-width: 60ch; margin: 0 0 26px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .cta-note { color: var(--muted); font-size: 15px; margin-top: 12px; }
+  section { padding: 56px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.02em; margin: 0 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 28px; max-width: 62ch; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 19px; }
+  .card p { margin: 0; color: var(--muted); }
+  .step-n { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); font-weight: 800; margin-bottom: 10px; }
+  .demo .trade { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .demo .num { display: block; font-size: 24px; font-weight: 800; margin: 6px 0 10px; color: var(--ink); text-decoration: none; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
+  .badge.live { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+  .badge.soon { background: color-mix(in srgb, var(--soon) 18%, transparent); color: var(--soon); }
+  .demo[data-live="false"] .num { color: var(--soon); pointer-events: none; }
+  ul.checks { list-style: none; padding: 0; margin: 0; }
+  ul.checks li { padding: 6px 0 6px 28px; position: relative; }
+  ul.checks li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); font-weight: 800; }
+  ul.nos li::before { content: "—"; color: var(--muted); }
+  .plans { align-items: stretch; }
+  .plan { display: flex; flex-direction: column; }
+  .plan .price { color: var(--ink); font-size: 40px; font-weight: 800; letter-spacing: -0.02em; margin: 6px 0 0; }
+  .plan .price small { font-size: 16px; color: var(--muted); font-weight: 600; }
+  .plan .mins { color: var(--ink); font-weight: 700; margin: 4px 0 16px; }
+  .plan ul { flex: 1; margin-bottom: 18px; }
+  .founding { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 14px; padding: 22px; margin-bottom: 22px; }
+  .founding h3 { margin: 0 0 8px; }
+  details { border-bottom: 1px solid var(--line); padding: 14px 0; }
+  summary { font-weight: 700; cursor: pointer; }
+  details p { color: var(--muted); margin: 10px 0 0; }
+  footer { padding: 32px 0 48px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+  @media (max-width: 520px) { .cta-row .btn { width: 100%; } header.top .btn { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="logo" href="#">Get Jobs <span>Booked</span></a>
+    <a class="btn btn-primary btn-sm" href="tel:+17026028867">Call the demo</a>
+  </header>
+
+  <div class="hero">
+    <p class="eyebrow">AI receptionist for roofing, HVAC, plumbing &amp; electrical</p>
+    <h1>Every call answered. Every job request in your inbox.</h1>
+    <p class="lede">When you're on a roof, under a sink or off the clock, Get Jobs Booked answers your phone in your company's name, gets the caller's details and emails you the job request right after the call. Your team calls back and confirms the time.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="tel:+17026028867">Call the demo line: (702) 602-8867</a>
+      <a class="btn btn-ghost" href="#pricing">See plans</a>
+    </div>
+    <p class="cta-note">Pretend you're a homeowner with a leak. Then check how it handled you.</p>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="sub">You keep your number. Calls you can't get to are forwarded to your Get Jobs Booked line.</p>
+    <div class="grid">
+      <div class="card"><div class="step-n">1</div><h3>It answers</h3><p>Day or night, in your business name. Callers hear a friendly receptionist, not a menu.</p></div>
+      <div class="card"><div class="step-n">2</div><h3>It gets the job</h3><p>Name, callback number (read back to confirm), address, the problem, how urgent it is and a preferred time window.</p></div>
+      <div class="card"><div class="step-n">3</div><h3>Safety first</h3><p>Gas smell, burst pipe, sparking panel: it gives the safety step before anything else and flags the call as an emergency.</p></div>
+      <div class="card"><div class="step-n">4</div><h3>You get it in minutes</h3><p>A job-request email with the details, a tap-to-call button and the call transcript. Text alerts are on the way.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <h2>Call a demo line</h2>
+    <p class="sub">Each demo is a made-up Las Vegas business, set up the way yours would be. Try a routine job, an emergency, or ask what it costs.</p>
+    <div class="grid">
+      <div class="card demo" data-live="true"><span class="trade">Plumbing</span><span class="badge live">Live</span>
+        <a class="num" href="tel:+17026028867">(702) 602-8867</a><p>Copperline Plumbing</p></div>
+      <div class="card demo" data-live="false"><span class="trade">HVAC</span><span class="badge soon">Coming soon</span>
+        <a class="num" href="tel:+17027448394">(702) 744-8394</a><p>Blue Mesa Heating &amp; Air</p></div>
+      <div class="card demo" data-live="false"><span class="trade">Roofing</span><span class="badge soon">Coming soon</span>
+        <a class="num" href="tel:+17253537160">(725) 353-7160</a><p>Ironridge Roofing</p></div>
+      <div class="card demo" data-live="false"><span class="trade">Electrical</span><span class="badge soon">Coming soon</span>
+        <a class="num" href="tel:+17253072525">(725) 307-2525</a><p>Brightwire Electric</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="honest">
+  <div class="wrap">
+    <div class="grid">
+      <div>
+        <h2>What it does</h2>
+        <ul class="checks">
+          <li>Answers 24/7 in your business name</li>
+          <li>Knows your services, service area, hours and emergency policy</li>
+          <li>Shares only the prices you approve, like your service-call fee</li>
+          <li>Emails you each job request with the transcript</li>
+          <li>Sends you a monthly report: calls answered, job requests, emergencies, after-hours calls</li>
+        </ul>
+      </div>
+      <div>
+        <h2>What it won't do</h2>
+        <ul class="checks nos">
+          <li>Pretend to be human. If someone asks, it says it's an AI receptionist.</li>
+          <li>Promise an appointment time. It takes the request; your team confirms.</li>
+          <li>Quote a firm price or diagnose the problem over the phone.</li>
+          <li>Take card numbers or payments.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <h2>Plans</h2>
+    <p class="sub">Monthly, based on the minutes your receptionist spends on calls.</p>
+    <div class="founding">
+      <h3>Founding seats: the first 10 businesses</h3>
+      <ul class="checks">
+        <li>No setup fee</li>
+        <li>Two-week trial on your own business line</li>
+        <li>Your monthly price is agreed up front, and nothing is billed until you say OK</li>
+      </ul>
+    </div>
+    <div class="grid plans">
+      <div class="card plan">
+        <p class="price">$199<small>/mo</small></p><p class="mins">350 minutes a month</p>
+        <ul class="checks"><li>24/7 answering</li><li>Job-request emails</li><li>Monthly report</li></ul>
+        <!-- PLACEHOLDER: Rod / Claude-A replace href with the $199 Stripe link -->
+        <a class="btn btn-primary" href="#STRIPE_LINK_199" data-plan="199" data-placeholder="true">Claim a founding seat</a>
+      </div>
+      <div class="card plan">
+        <p class="price">$399<small>/mo</small></p><p class="mins">750 minutes a month</p>
+        <ul class="checks"><li>24/7 answering</li><li>Job-request emails</li><li>Monthly report</li></ul>
+        <!-- PLACEHOLDER: Rod / Claude-A replace href with the $399 Stripe link -->
+        <a class="btn btn-primary" href="#STRIPE_LINK_399" data-plan="399" data-placeholder="true">Claim a founding seat</a>
+      </div>
+      <div class="card plan">
+        <p class="price">$699<small>/mo</small></p><p class="mins">1,400 minutes a month</p>
+        <ul class="checks"><li>24/7 answering</li><li>Job-request emails</li><li>Monthly report</li></ul>
+        <!-- PLACEHOLDER: Rod / Claude-A replace href with the $699 Stripe link -->
+        <a class="btn btn-primary" href="#STRIPE_LINK_699" data-plan="699" data-placeholder="true">Claim a founding seat</a>
+      </div>
+    </div>
+    <p class="cta-note">Not sure which? Call the demo first: <a href="tel:+17026028867">(702) 602-8867</a>.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Questions</h2>
+    <details><summary>Do I keep my phone number?</summary><p>Yes. You forward calls to your Get Jobs Booked line, usually just the ones you don't answer, so your office still picks up first.</p></details>
+    <details><summary>Does it book appointments?</summary><p>No. It takes the job request and tells the caller your team will call back to confirm a time. You stay in control of your schedule.</p></details>
+    <details><summary>Will callers know it's AI?</summary><p>It greets callers as your AI receptionist, and if anyone asks whether they're talking to a person, it says plainly that it's an AI and your team follows up.</p></details>
+    <details><summary>What does it know about my business?</summary><p>What you tell us at setup: services, service area, hours, emergency policy, how you handle scheduling, and any prices you want shared. If a caller asks something it doesn't know, it says your team will confirm on the callback.</p></details>
+    <details><summary>How do I get the job details?</summary><p>By email, right after each call, with the caller's details, a tap-to-call button and the transcript. Emergencies are flagged in the subject line. Text alerts are coming.</p></details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Get Jobs Booked · getjobsbooked.co</p>
+    <!-- PLACEHOLDER: add contact email, legal business name, and links to Terms and Privacy before launch -->
+  </div>
+</footer>
+</body>
+</html>
