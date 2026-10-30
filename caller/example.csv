@@ -1,0 +1,4 @@
+business,phone,time_zone,posted_hours
+Fictional Roofing,+17025550100,America/Phoenix,"{""mon"":[""08:00-19:00""],""tue"":[""08:00-19:00""],""wed"":[""08:00-19:00""],""thu"":[""08:00-19:00""],""fri"":[""08:00-19:00""]}"
+Fictional Always Open,+17025550101,America/Los_Angeles,24/7
+Fictional Unknown Hours,+17025550102,America/New_York,
