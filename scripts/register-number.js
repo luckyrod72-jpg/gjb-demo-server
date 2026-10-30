@@ -11,14 +11,29 @@ function registration(env) {
   return { origin: 'byo_trunk', name: env.XAI_NUMBER_NAME || 'Get Jobs Booked demo', phone_number: XAI_PHONE_NUMBER,
     webhook: { name: 'Get Jobs Booked incoming SIP', url: url.href }, sip_auth: { allowed_addresses: addresses } };
 }
+function findSecret(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  const direct = obj.webhook?.signing_secret || obj.webhook?.secret || obj.signing_secret || obj.webhook_signing_secret;
+  if (typeof direct === 'string' && direct) return direct;
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'string' && v && /secret/i.test(k)) return v;
+    if (v && typeof v === 'object') { const f = findSecret(v); if (f) return f; }
+  }
+  return null;
+}
 async function register(env = process.env, request = fetch) {
   const body = registration(env);
   const r = await request('https://api.x.ai/v2/phone-numbers', { method: 'POST', headers: { Authorization: `Bearer ${env.XAI_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`Number registration failed: HTTP ${r.status}; response omitted to protect secrets. Do not retry blindly.`);
   const result = await r.json();
-  const secret = result.webhook?.signing_secret || result.webhook?.secret;
-  if (!secret) throw new Error('Registration succeeded but signing secret was not in the expected webhook field; inspect securely in the account. Do not re-register.');
+  const secret = findSecret(result);
+  if (!secret) {
+    // xAI shows the secret only once, so never lose it: print the raw response to this shell only.
+    console.error('Registration succeeded but no secret field was recognised. Raw response below; copy the signing secret from it into XAI_WEBHOOK_SECRETS. Do not re-register.');
+    console.error(JSON.stringify(result, null, 2));
+    throw new Error('Secret not auto-detected (see raw response above).');
+  }
   return secret;
 }
 if (require.main === module) register().then(secret => process.stdout.write(secret + '\n')).catch(e => { console.error(e.message); process.exitCode = 1; });
-module.exports = { registration, register };
+module.exports = { registration, register, findSecret };
