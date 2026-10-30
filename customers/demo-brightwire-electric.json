@@ -1,0 +1,49 @@
+{
+  "id": "demo-brightwire-electric",
+  "business": "Brightwire Electric",
+  "trade": "electrical",
+  "phoneNumber": "+17253072525",
+  "carrier": "twilio",
+  "demo": true,
+  "status": "active",
+  "plan": null,
+  "trialEndsAt": null,
+  "ownerName": "Get Jobs Booked demo",
+  "ownerEmail": null,
+  "timezone": "America/Los_Angeles",
+  "businessHours": {
+    "mon": [
+      "07:00-18:00"
+    ],
+    "tue": [
+      "07:00-18:00"
+    ],
+    "wed": [
+      "07:00-18:00"
+    ],
+    "thu": [
+      "07:00-18:00"
+    ],
+    "fri": [
+      "07:00-18:00"
+    ],
+    "sat": [
+      "08:00-14:00"
+    ],
+    "sun": []
+  },
+  "serviceArea": [
+    "Las Vegas",
+    "Henderson",
+    "North Las Vegas",
+    "Summerlin",
+    "Spring Valley",
+    "Enterprise",
+    "Paradise"
+  ],
+  "emergencyPolicy": "24/7 for true emergencies; an after-hours emergency fee applies.",
+  "scheduling": "The team calls back to confirm the appointment time.",
+  "callbackEmergency": "within 15 minutes",
+  "callbackRoutine": "by 9am next business day",
+  "notes": "Fictional demo business. Instructions come from kb/shared.md + kb/electrical.md unchanged."
+}

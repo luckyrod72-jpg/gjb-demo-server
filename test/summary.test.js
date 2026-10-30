@@ -4,7 +4,7 @@ const { EventEmitter } = require('node:events');
 const { joinCall } = require('../server');
 const { buildSummary, sendSummary, SAVE_JOB_TOOL } = require('../summary');
 class Socket extends EventEmitter { constructor() { super(); this.sent=[]; } send(x) {this.sent.push(JSON.parse(x));} terminate(){this.ended=true;} }
-const line = { business: 'Copperline Plumbing', trade: 'plumbing', ownerEmail: 'owner@example.com' };
+const line = { business: 'Copperline Plumbing', trade: 'plumbing', demo: true, ownerEmail: 'owner@example.com' };
 const quiet = { error() {}, warn() {}, log() {} };
 const msg = (ws, o) => ws.emit('message', Buffer.from(JSON.stringify(o)));
 

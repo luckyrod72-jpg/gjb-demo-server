@@ -1,0 +1,30 @@
+{
+  "id": "example-saguaro-plumbing",
+  "business": "Saguaro Plumbing Co",
+  "trade": "plumbing",
+  "phoneNumber": "+16025550142",
+  "carrier": "telnyx",
+  "demo": false,
+  "status": "trial",
+  "plan": 399,
+  "trialEndsAt": "2026-11-13",
+  "ownerName": "Jordan Example",
+  "ownerEmail": "owner@example.com",
+  "timezone": "America/Phoenix",
+  "businessHours": {
+    "mon": ["07:30-17:00"], "tue": ["07:30-17:00"], "wed": ["07:30-17:00"],
+    "thu": ["07:30-17:00"], "fri": ["07:30-17:00"], "sat": [], "sun": []
+  },
+  "serviceArea": ["Phoenix", "Tempe", "Mesa", "Chandler"],
+  "servicesOffered": ["drain cleaning", "water heater repair and replacement", "leak detection", "toilet and faucet repair"],
+  "serviceCallFee": "$79, waived if you go ahead with the repair",
+  "priceRanges": ["drain clearing starts at $149"],
+  "emergencyPolicy": "Burst pipes, sewage backups and gas smells are handled 24/7; after-hours visits carry a $125 fee.",
+  "scheduling": "Most repairs are next business day. The team calls back to confirm a time window.",
+  "callbackEmergency": "within 20 minutes",
+  "callbackRoutine": "by 10am the next business day",
+  "gasUtility": "Southwest Gas",
+  "electricUtility": "APS",
+  "ownerNotes": "We do not service commercial buildings.",
+  "faqs": [{ "q": "Do you do tankless?", "a": "Repairs yes; installs are a free estimate." }]
+}
