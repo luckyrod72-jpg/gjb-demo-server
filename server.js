@@ -108,7 +108,8 @@ app.get("/health", (_req, res) => res.json({ ok: true, lines: Object.keys(LINES)
 app.post("/webhooks/xai", express.raw({ type: "*/*", limit: "1mb" }), (req, res) => {
   const raw = req.body.toString("utf8");
   if (!verifySignature(raw, req.headers, WEBHOOK_SECRETS)) {
-    console.warn("[webhook] rejected: bad or missing signature");
+    const h = req.headers;
+    console.warn(`[webhook] rejected: bad or missing signature (secrets loaded: ${WEBHOOK_SECRETS.length}; headers id/ts/sig present: ${!!h["webhook-id"]}/${!!h["webhook-timestamp"]}/${!!h["webhook-signature"]}; sig format: ${String(h["webhook-signature"] || "").split(",")[0].slice(0, 6)})`);
     return res.status(401).send("bad signature");
   }
   let evt; try { evt = JSON.parse(raw); } catch { return res.status(400).send("bad json"); }
