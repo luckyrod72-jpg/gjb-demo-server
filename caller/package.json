@@ -1,0 +1,1 @@
+{"name":"gjb-off-hours-caller","private":true,"type":"commonjs","engines":{"node":">=22"},"scripts":{"test":"node --test *.test.js"}}
