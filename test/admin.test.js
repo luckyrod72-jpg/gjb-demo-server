@@ -70,3 +70,16 @@ test('without CUSTOMERS_DIR the form returns the file to commit; with it the cus
   assert.match(list, /Cactus Flow/);
   s.close(); fs.rmSync(dir, { recursive: true });
 });
+
+test('admin report preview renders last month and sends nothing', async () => {
+  const { memoryLog } = require('../calllog');
+  const example = require('../docs/customer.example.json');
+  const store = { all: () => [example], byId: id => (id === example.id ? example : null), byNumber: () => null };
+  const app = express(); app.use('/admin', adminRouter({ store, callLog: memoryLog(), env: { ADMIN_TOKEN: 't' }, now: () => new Date('2026-12-05T18:00:00Z') }));
+  const srv = app.listen(0); await new Promise(r => srv.once('listening', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const html = await (await fetch(`${base}/admin/report/${example.id}`, { headers: auth('t') })).text();
+  assert.match(html, /November 2026 call report/); assert.match(html, /Preview only/);
+  assert.equal((await fetch(`${base}/admin/report/nope`, { headers: auth('t') })).status, 404);
+  srv.close();
+});
