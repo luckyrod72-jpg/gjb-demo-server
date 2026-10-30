@@ -10,6 +10,8 @@ const WebSocket = require("ws");
 const { createStore } = require("./customers");
 const { buildInstructions } = require("./instructions");
 const { adminRouter } = require("./admin");
+const { createCallLog, callRow } = require("./calllog");
+const { checkUsage } = require("./usage");
 const { SAVE_JOB_TOOL, buildSummary, sendSummary } = require("./summary");
 
 const XAI_API_KEY = process.env.XAI_API_KEY;
@@ -23,6 +25,16 @@ if (!XAI_API_KEY) console.warn("[warn] XAI_API_KEY is not set");
 if (!WEBHOOK_SECRETS.length) console.warn("[warn] XAI_WEBHOOK_SECRET(S) not set: webhooks will be rejected");
 
 const customers = createStore();
+const callLog = createCallLog();
+callLog.init().catch(e => console.error(`[calls] could not prepare the call log tables: ${e.message}`));
+
+// After every answered call: log it, then check the customer's plan minutes.
+async function recordCall(info, { log = callLog, mail = sendSummary, env = process.env, logger = console } = {}) {
+  const row = callRow(info);
+  await log.record(row);
+  await checkUsage({ customer: info.customer, month: row.month, callLog: log, mail, env, log: logger });
+  return row;
+}
 
 // Standard Webhooks style verification: HMAC-SHA256 over `${id}.${timestamp}.${body}`.
 // Standard Webhooks v1: versioned base64 signatures and a bounded integer timestamp.
@@ -62,7 +74,7 @@ async function hangup(callId, { request = fetch, log = console } = {}) {
   } catch { log.error("[call] hangup unavailable; carrier timeout must clear call"); }
 }
 
-function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs = 10000, log = console, env = process.env, mail = sendSummary } = {}) {
+function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs = 10000, log = console, env = process.env, mail = sendSummary, onEnd = null } = {}) {
   let ws, ready = false, failed = false, finished = false;
   const startedAt = Date.now();
   let job = null;
@@ -72,6 +84,7 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
     finished = true;
     const endedAt = Date.now();
     log.log?.(`[call ${callId}] ended after ${Math.round((endedAt - startedAt) / 1000)}s (${line.business}); job captured: ${!!job}`);
+    if (onEnd) { try { await onEnd({ callId, customer: line, startedAt, endedAt, job }); } catch (e) { log.error(`[call ${callId}] call log failed: ${e.message}`); } }
     if (!job && !transcript.some(t => t.role === "caller")) return; // silent/hang-up call: nothing to report
     try {
       const summary = buildSummary({ line, job, transcript, startedAt, endedAt, callId });
@@ -159,9 +172,9 @@ app.post("/webhooks/xai", express.raw({ type: "*/*", limit: "1mb" }), (req, res)
   const r = routeCall(evt, customers);
   if (r.action === "ignore") return console.log(`[webhook] ${r.reason}`);
   if (r.action === "hangup") { console.warn(`[webhook] ${r.reason}`); return void hangup(r.callId); }
-  joinCall(r.callId, r.line);
+  joinCall(r.callId, r.line, { onEnd: recordCall });
 });
 
 if (require.main === module) app.listen(PORT, () => console.log(`GJB demo server on :${PORT}`));
-module.exports = { verifySignature, dialedNumber, joinCall, routeCall, app, customers };
+module.exports = { verifySignature, dialedNumber, joinCall, routeCall, recordCall, app, customers, callLog };
 
