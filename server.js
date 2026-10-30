@@ -14,7 +14,7 @@ const LINES = require("./lines");
 const XAI_API_KEY = process.env.XAI_API_KEY;
 const WEBHOOK_SECRETS = (process.env.XAI_WEBHOOK_SECRETS || process.env.XAI_WEBHOOK_SECRET || "")
   .split(",").map(s => s.trim()).filter(Boolean); // one secret per registered number is fine
-const VOICE = process.env.XAI_VOICE || "eve";
+const VOICE = process.env.XAI_VOICE || "ara";
 const PORT = process.env.PORT || 3000;
 const TOLERANCE_SECONDS = 300;
 
