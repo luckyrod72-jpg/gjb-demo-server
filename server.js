@@ -12,6 +12,7 @@ const { buildInstructions } = require("./instructions");
 const { adminRouter } = require("./admin");
 const { createCallLog, callRow } = require("./calllog");
 const { checkUsage } = require("./usage");
+const { sendDueReports } = require("./report");
 const { SAVE_JOB_TOOL, buildSummary, sendSummary } = require("./summary");
 
 const XAI_API_KEY = process.env.XAI_API_KEY;
@@ -155,7 +156,7 @@ function routeCall(evt, store) {
 }
 
 const app = express();
-app.use("/admin", adminRouter({ store: customers }));
+app.use("/admin", adminRouter({ store: customers, callLog }));
 app.get("/health", (_req, res) => {
   const all = customers.all();
   res.json({ ok: true, lines: all.length, demo: all.filter(c => c.demo).length, customers: all.filter(c => !c.demo).length });
@@ -179,6 +180,12 @@ app.post("/webhooks/xai", express.raw({ type: "*/*", limit: "1mb" }), (req, res)
 if (require.main === module) {
   callLog.init().catch(e => console.error(`[calls] could not prepare the call log tables: ${e.message}`));
   app.listen(PORT, () => console.log(`GJB demo server on :${PORT}`));
+  // Monthly customer reports (off unless REPORTS_ENABLED=true). Checks hourly; no database traffic except on the 1st.
+  const tick = () => sendDueReports({ customers, callLog, mail: sendSummary })
+    .then(sent => sent.length && console.log(`[report] sent ${sent.map(s => `${s.id} ${s.month}`).join(", ")}`))
+    .catch(e => console.error(`[report] check failed: ${e.message}`));
+  setInterval(tick, 60 * 60 * 1000).unref();
+  setTimeout(tick, 60 * 1000).unref();
 }
 module.exports = { verifySignature, dialedNumber, joinCall, routeCall, recordCall, app, customers, callLog };
 

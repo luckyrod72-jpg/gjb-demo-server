@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS usage_alerts (
   level       integer NOT NULL,            -- 80 or 100 (% of plan minutes)
   sent_at     timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (customer_id, month, level)
+);
+CREATE TABLE IF NOT EXISTS report_sends (
+  customer_id text NOT NULL,
+  month       text NOT NULL,               -- the month the report covers
+  sent_at     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (customer_id, month)
 );`;
 
 // Shapes one finished call into a log row.
@@ -47,13 +53,15 @@ const sumRows = rows => ({
 });
 
 function memoryLog() {
-  const calls = new Map(), alerts = new Set();
+  const calls = new Map(), alerts = new Set(), reports = new Set();
   return {
     kind: "memory",
     async init() {},
     async record(row) { if (!calls.has(row.callId)) calls.set(row.callId, row); },
     async monthStats(customerId, month) { return sumRows([...calls.values()].filter(r => r.customerId === customerId && r.month === month)); },
     async claimAlert(customerId, month, level) { const k = `${customerId}|${month}|${level}`; if (alerts.has(k)) return false; alerts.add(k); return true; },
+    async claimReport(customerId, month) { const k = `${customerId}|${month}`; if (reports.has(k)) return false; reports.add(k); return true; },
+    async releaseReport(customerId, month) { reports.delete(`${customerId}|${month}`); },
     async close() {},
   };
 }
@@ -84,6 +92,11 @@ function pgLog(pool) {
         `INSERT INTO usage_alerts (customer_id, month, level) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [customerId, month, level]);
       return rowCount === 1;
     },
+    async claimReport(customerId, month) {
+      const { rowCount } = await pool.query(`INSERT INTO report_sends (customer_id, month) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [customerId, month]);
+      return rowCount === 1;
+    },
+    async releaseReport(customerId, month) { await pool.query(`DELETE FROM report_sends WHERE customer_id = $1 AND month = $2`, [customerId, month]); },
     async close() { await pool.end(); },
   };
 }

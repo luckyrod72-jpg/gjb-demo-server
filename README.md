@@ -36,6 +36,11 @@ Steers the Grok voice agent for the four Get Jobs Booked demo lines. Audio flows
 - Minutes used = answered seconds this calendar month in the customer's time zone, rounded up to the whole minute. `USAGE_ALERT_TO` gets one email when a customer passes 80% and one at 100% of plan minutes (demo lines excluded). Calls keep being answered over the limit.
 - Run the Postgres test locally: `TEST_DATABASE_URL=postgres://... npm test`.
 
+## Monthly customer report
+- Each live customer (not demo, not paused) gets one email per month at their `ownerEmail`: calls answered, job requests captured, emergencies, after-hours calls, after-hours jobs, minutes used of plan. It states that the team confirms times; it never claims bookings.
+- **Off by default.** Set `REPORTS_ENABLED=true` to turn it on; the server then sends last month's report on the 1st from 8am in the customer's time zone, once (tracked in `report_sends`; a failed send retries next hour).
+- Preview without sending: `/admin/report/<customer-id>?month=YYYY-MM`, or `node scripts/monthly-report.js <customer-id> [YYYY-MM]`. Add `--send` to the script to send one by hand.
+
 ## Open items to verify on the first live call
 - Webhook signature scheme (implemented as Standard Webhooks HMAC-SHA256 `id.timestamp.body`; test in `test/`).
 - Field names inside `session.update` (voice, instructions, turn_detection per xAI docs).

@@ -12,6 +12,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { validateCustomer, TRADES, CARRIERS, STATUSES, PLANS, DAYS } = require("./customers");
+const { buildReport, previousMonth } = require("./report");
+const { localParts } = require("./hours");
 
 const TIMEZONES = ["America/Los_Angeles", "America/Phoenix", "America/Denver", "America/Chicago", "America/New_York", "America/Anchorage", "Pacific/Honolulu"];
 const DAY_NAMES = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" };
@@ -101,7 +103,7 @@ ${select("status", "Status", STATUSES.map(s => [s, s]), d)}${field("trialEndsAt"
 <button type="submit">Create customer</button></form>`);
 }
 
-function adminRouter({ store, env = process.env, now = () => new Date() } = {}) {
+function adminRouter({ store, callLog = null, env = process.env, now = () => new Date() } = {}) {
   const r = express.Router();
   r.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
@@ -116,6 +118,15 @@ function adminRouter({ store, env = process.env, now = () => new Date() } = {}) 
   r.get("/intake", (_req, res) => res.send(intakeForm()));
   r.get("/customers", (_req, res) => res.send(page("GJB — customers", `<h1>Customers</h1><p><a href="/admin/intake">+ New customer</a></p><table><tr><th>ID</th><th>Business</th><th>Number</th><th>Status</th><th>Plan</th><th>Trial ends</th></tr>${store.all().map(c =>
     `<tr><td>${esc(c.id)}</td><td>${esc(c.business)}${c.demo ? " (demo)" : ""}</td><td>${esc(c.phoneNumber)}</td><td>${esc(c.status)}</td><td>${c.plan ? `$${esc(c.plan)}` : "—"}</td><td>${esc(c.trialEndsAt || "—")}</td></tr>`).join("")}</table>`)));
+  // Preview a customer's monthly report: /admin/report/<id>?month=YYYY-MM (default: last month). Sends nothing.
+  r.get("/report/:id", async (req, res) => {
+    const c = store.byId(req.params.id);
+    if (!c || !callLog) return res.status(404).send("No such customer (or no call log).");
+    const p = localParts(now(), c.timezone);
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || "") ? req.query.month : previousMonth(`${p.year}-${p.month}`);
+    const rep = buildReport(c, month, await callLog.monthStats(c.id, month));
+    res.send(page(rep.subject, `<p class="hint">Preview only. To: ${esc(c.ownerEmail || "(no owner email)")} · Subject: ${esc(rep.subject)}</p>${rep.html}`));
+  });
   r.post("/customers", express.urlencoded({ extended: false, limit: "64kb" }), (req, res) => {
     const f = req.body || {};
     const c = customerFromForm(f, now());
