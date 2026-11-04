@@ -94,7 +94,15 @@ function basics(c) {
   return out.join("\n");
 }
 
-function buildInstructions(c) {
+// Roderick's inbound lines: their own script and knowledge base, no job-intake rules.
+function salesInstructions(c, now) {
+  const when = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(now);
+  const greeting = `Hi, you've reached Roderick Adams with ${c.business}, this is his virtual receptionist. He's tied up at the moment. Can I answer a question, or set up a time for him to call you back?`;
+  return read("sales-shared.md").replace("[GREETING]", greeting).replace("[NOW]", when) + "\n\n" + read(`sales-${c.inbound}.md`);
+}
+
+function buildInstructions(c, now = new Date()) {
+  if (c.inbound) return salesInstructions(c, now);
   if (c.demo) return legacy(c);
   if (!Array.isArray(c.servicesOffered) || !c.servicesOffered.length) throw new Error(`${c.id}: servicesOffered is required for real customers`);
   return `${sharedRules(c)}${basics(c)}\n\n${emergencies(c)}`;

@@ -29,3 +29,11 @@ test('every demo number on the page is a real demo line, and the live one is the
   assert.equal(new Set(nums).size, Object.keys(lines).length);
   assert.match(html, /data-live="true"><span class="trade">Plumbing/);
 });
+
+
+test('footer uses the current GJB mailbox and preserves demo badges', () => {
+  assert.match(html, /href="mailto:hello@getjobsbooked\.co">hello@getjobsbooked\.co<\/a>/);
+  assert.doesNotMatch(html, /support@getjobsbooked\.co/);
+  assert.equal((html.match(/class="card demo" data-live="true"/g) || []).length, 1);
+  assert.equal((html.match(/class="card demo" data-live="false"/g) || []).length, 3);
+});

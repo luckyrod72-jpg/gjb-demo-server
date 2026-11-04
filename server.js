@@ -14,6 +14,9 @@ const { createCallLog, callRow } = require("./calllog");
 const { checkUsage } = require("./usage");
 const { sendDueReports } = require("./report");
 const { SAVE_JOB_TOOL, buildSummary, sendSummary } = require("./summary");
+const { createCalendar } = require("./calendar");
+const { INBOUND_TOOLS, createInboundSession, buildCallbackSummary } = require("./inbound");
+const { texmlRouter } = require("./texml");
 
 const XAI_API_KEY = process.env.XAI_API_KEY;
 const WEBHOOK_SECRETS = (process.env.XAI_WEBHOOK_SECRETS || process.env.XAI_WEBHOOK_SECRET || "")
@@ -26,6 +29,7 @@ if (!XAI_API_KEY) console.warn("[warn] XAI_API_KEY is not set");
 if (!WEBHOOK_SECRETS.length) console.warn("[warn] XAI_WEBHOOK_SECRET(S) not set: webhooks will be rejected");
 
 const customers = createStore();
+const calendar = createCalendar();
 const callLog = createCallLog(); // tables are created when the server starts (see bottom)
 
 // After every answered call: log it, then check the customer's plan minutes.
@@ -74,20 +78,32 @@ async function hangup(callId, { request = fetch, log = console } = {}) {
   } catch { log.error("[call] hangup unavailable; carrier timeout must clear call"); }
 }
 
-function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs = 10000, log = console, env = process.env, mail = sendSummary, onEnd = null } = {}) {
+function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs = 10000, log = console, env = process.env, mail = sendSummary, onEnd = null, cal = calendar } = {}) {
   let ws, ready = false, failed = false, finished = false;
   const startedAt = Date.now();
   let job = null;
   const transcript = [];
+  const pendingInboundTools = new Set();
+  const inboundBatches = new Map();
+  const continueInbound = (key, batch) => {
+    if (batch.pending || !batch.done || finished || failed) return;
+    inboundBatches.delete(key);
+    try { ws.send(JSON.stringify({ type: "response.create" })); } catch { /* call may be ending */ }
+  };
+  const inbound = line.inbound ? createInboundSession(line, { calendar: cal, log }) : null;
   const finish = async () => {
     if (finished || !ready) return;
     finished = true;
     const endedAt = Date.now();
+    if (inbound) {
+      await Promise.allSettled([...pendingInboundTools]);
+      job = inbound.state.details;
+    }
     log.log?.(`[call ${callId}] ended after ${Math.round((endedAt - startedAt) / 1000)}s (${line.business}); job captured: ${!!job}`);
     // The owner's job email goes first; the call log must never delay or block it.
     if (job || transcript.some(t => t.role === "caller")) { // silent/hang-up call: nothing to email
       try {
-        const summary = buildSummary({ line, job, transcript, startedAt, endedAt, callId });
+        const summary = inbound ? buildCallbackSummary({ line, state: inbound.state, transcript, callId }) : buildSummary({ line, job, transcript, startedAt, endedAt, callId });
         await mail(summary, { to: line.ownerEmail || env.SUMMARY_TO, env, request, log });
       } catch (e) { log.error(`[summary] failed: ${e.message}`); }
     }
@@ -115,7 +131,7 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
     try {
     ws.send(JSON.stringify({
       type: "session.update",
-      session: { voice: VOICE, instructions, turn_detection: { type: "server_vad" }, tools: [SAVE_JOB_TOOL] }
+      session: { voice: VOICE, instructions, turn_detection: { type: "server_vad" }, tools: inbound ? INBOUND_TOOLS : [SAVE_JOB_TOOL] }
     }));
     } catch { void fail(); }
   });
@@ -126,12 +142,37 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
         ready = true; clearTimeout(timer);
         try { ws.send(JSON.stringify({ type: "response.create" })); } catch { void fail(); }
       }
-      if (ev.type === "response.function_call_arguments.done" && ev.name === SAVE_JOB_TOOL.name) {
+      if (inbound && !finished && !failed && ev.type === "response.function_call_arguments.done" && inbound.handlers[ev.name]) {
+        let args = {}; try { args = JSON.parse(ev.arguments || "{}"); } catch { /* handler copes */ }
+        const key = ev.response_id || "unscoped";
+        const batch = inboundBatches.get(key) || { pending: 0, done: false };
+        batch.pending++;
+        inboundBatches.set(key, batch);
+        const task = Promise.resolve().then(() => inbound.handlers[ev.name](args)).catch(e => { log.error(`[call ${callId}] inbound tool failed`); return { error: true, instruction: "Save their details and say Roderick will reach out." }; }).then(output => {
+          if (finished || failed) return;
+          try {
+            ws.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: ev.call_id, output: JSON.stringify(output) } }));
+          } catch { /* call may be ending */ }
+        });
+        pendingInboundTools.add(task);
+        task.finally(() => {
+          pendingInboundTools.delete(task);
+          batch.pending--;
+          continueInbound(key, batch);
+        });
+      }
+      else if (ev.type === "response.function_call_arguments.done" && ev.name === SAVE_JOB_TOOL.name) {
         try { job = { ...(job || {}), ...JSON.parse(ev.arguments || "{}") }; } catch { /* keep previous */ }
         try {
           ws.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: ev.call_id, output: JSON.stringify({ saved: true }) } }));
           ws.send(JSON.stringify({ type: "response.create" }));
         } catch { /* call may be ending */ }
+      }
+      if (inbound && ev.type === "response.done") {
+        const responseKey = ev.response?.id || ev.response_id;
+        const key = inboundBatches.has(responseKey) ? responseKey : "unscoped";
+        const batch = inboundBatches.get(key);
+        if (batch) { batch.done = true; continueInbound(key, batch); }
       }
       if (ev.type === "conversation.item.input_audio_transcription.completed" && ev.transcript) transcript.push({ role: "caller", text: String(ev.transcript).trim() });
       if (ev.type === "response.output_audio_transcript.done" && ev.transcript) transcript.push({ role: "agent", text: String(ev.transcript).trim() });
@@ -157,9 +198,10 @@ function routeCall(evt, store) {
 
 const app = express();
 app.use("/admin", adminRouter({ store: customers, callLog }));
+app.use("/telnyx", texmlRouter({ store: customers }));
 app.get("/health", (_req, res) => {
   const all = customers.all();
-  res.json({ ok: true, lines: all.length, demo: all.filter(c => c.demo).length, customers: all.filter(c => !c.demo).length });
+  res.json({ ok: true, lines: all.length, demo: all.filter(c => c.demo).length, inbound: all.filter(c => c.inbound).length, customers: all.filter(c => !c.demo && !c.inbound).length });
 });
 
 app.post("/webhooks/xai", express.raw({ type: "*/*", limit: "1mb" }), (req, res) => {

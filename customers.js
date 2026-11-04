@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 
 const TRADES = ["plumbing", "hvac", "roofing", "electrical"];
+const INBOUND = ["trs", "gjb"]; // Roderick's own inbound lines; not customers, no plan or billing
 const STATUSES = ["trial", "active", "paused"];
 const PLANS = { 199: 350, 399: 750, 699: 1400 }; // monthly price -> included minutes
 const CARRIERS = ["telnyx", "twilio"];
@@ -24,12 +25,15 @@ function validateCustomer(c) {
   if (!c || typeof c !== "object" || Array.isArray(c)) return ["customer must be an object"];
   if (!ID.test(c.id || "")) errs.push("id: lowercase letters, digits and dashes, 2-63 chars");
   if (!isStr(c.business)) errs.push("business: required");
-  if (!TRADES.includes(c.trade)) errs.push(`trade: one of ${TRADES.join(", ")}`);
+  const inbound = c.inbound != null;
+  if (inbound && !INBOUND.includes(c.inbound)) errs.push(`inbound: one of ${INBOUND.join(", ")}`);
+  if (inbound && (c.demo || c.plan != null)) errs.push("inbound lines are not demo lines and have no plan");
+  if (!inbound && !TRADES.includes(c.trade)) errs.push(`trade: one of ${TRADES.join(", ")}`);
   if (!E164.test(c.phoneNumber || "")) errs.push("phoneNumber: E.164, e.g. +17025550100");
   if (!CARRIERS.includes(c.carrier)) errs.push(`carrier: one of ${CARRIERS.join(", ")}`);
   if (!isStr(c.ownerName)) errs.push("ownerName: required");
   if (c.ownerEmail != null && !EMAIL.test(c.ownerEmail)) errs.push("ownerEmail: not a valid email");
-  if (!c.demo && !c.ownerEmail) errs.push("ownerEmail: required for real customers");
+  if (!c.demo && !inbound && !c.ownerEmail) errs.push("ownerEmail: required for real customers");
   if (!isStr(c.timezone)) errs.push("timezone: IANA name, e.g. America/Phoenix");
   else { try { new Intl.DateTimeFormat("en-US", { timeZone: c.timezone }); } catch { errs.push(`timezone: unknown "${c.timezone}"`); } }
   const h = c.businessHours;
@@ -38,17 +42,17 @@ function validateCustomer(c) {
     if (!Array.isArray(h[d]) || !h[d].every(r => RANGE.test(r) && r.split("-")[0] < r.split("-")[1]))
       errs.push(`businessHours.${d}: list of "HH:MM-HH:MM" ranges ([] = closed)`);
   }
-  if (!(strList(c.serviceArea) && c.serviceArea.length)) errs.push("serviceArea: list of cities/areas");
-  if (!isStr(c.emergencyPolicy)) errs.push("emergencyPolicy: required");
-  if (!isStr(c.scheduling)) errs.push("scheduling: required (what to tell callers about scheduling)");
-  if (!isStr(c.callbackEmergency)) errs.push('callbackEmergency: e.g. "within 15 minutes"');
-  if (!isStr(c.callbackRoutine)) errs.push('callbackRoutine: e.g. "by 9am next business day"');
+  if (!inbound && !(strList(c.serviceArea) && c.serviceArea.length)) errs.push("serviceArea: list of cities/areas");
+  if (!inbound && !isStr(c.emergencyPolicy)) errs.push("emergencyPolicy: required");
+  if (!inbound && !isStr(c.scheduling)) errs.push("scheduling: required (what to tell callers about scheduling)");
+  if (!inbound && !isStr(c.callbackEmergency)) errs.push('callbackEmergency: e.g. "within 15 minutes"');
+  if (!inbound && !isStr(c.callbackRoutine)) errs.push('callbackRoutine: e.g. "by 9am next business day"');
   if (!STATUSES.includes(c.status)) errs.push(`status: one of ${STATUSES.join(", ")}`);
   if (c.demo != null && typeof c.demo !== "boolean") errs.push("demo: true or false");
   if (c.demo) { if (c.plan != null) errs.push("plan: demo lines have no plan"); }
-  else if (!(c.plan in PLANS)) errs.push(`plan: one of ${Object.keys(PLANS).join(", ")}`);
+  else if (!inbound && !(c.plan in PLANS)) errs.push(`plan: one of ${Object.keys(PLANS).join(", ")}`);
   if (c.status === "trial" && !/^\d{4}-\d{2}-\d{2}$/.test(c.trialEndsAt || "")) errs.push("trialEndsAt: YYYY-MM-DD required while on trial");
-  if (!c.demo && !(strList(c.servicesOffered) && c.servicesOffered.length)) errs.push("servicesOffered: required for real customers (the agent only offers what is listed)");
+  if (!c.demo && !inbound && !(strList(c.servicesOffered) && c.servicesOffered.length)) errs.push("servicesOffered: required for real customers (the agent only offers what is listed)");
   for (const k of ["servicesOffered", "priceRanges"]) if (c[k] != null && !strList(c[k])) errs.push(`${k}: list of text lines`);
   for (const k of ["serviceCallFee", "gasUtility", "electricUtility", "ownerNotes"]) if (c[k] != null && typeof c[k] !== "string") errs.push(`${k}: text`);
   if (c.faqs != null && !(Array.isArray(c.faqs) && c.faqs.every(f => f && isStr(f.q) && isStr(f.a)))) errs.push("faqs: list of {q, a}");
@@ -94,7 +98,7 @@ function createStore({ dirs = [path.join(__dirname, "customers"), process.env.CU
 // For scripts/reg.js: accept a customer id, or a trade name (= that trade's demo line).
 function pickForRegistration(arg, customers) {
   const a = String(arg || "").toLowerCase();
-  return customers.find(c => c.id === a) || customers.find(c => c.demo && c.trade === a) || null;
+  return customers.find(c => c.id === a) || customers.find(c => c.inbound === a) || customers.find(c => c.demo && c.trade === a) || null;
 }
 
 module.exports = { validateCustomer, createStore, pickForRegistration, TRADES, STATUSES, PLANS, CARRIERS, DAYS };
