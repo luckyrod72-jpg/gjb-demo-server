@@ -31,6 +31,8 @@ test('instructions: right greeting and KB, virtual receptionist, never the demo 
   assert.match(g, /Hi, you've reached Roderick Adams with Get Jobs Booked, this is his virtual receptionist/);
   assert.match(t, /Wednesday, November 4, 2026 at 12:00 PM Pacific/);
   assert.match(t, /\$297/); assert.doesNotMatch(t, /\$199/);
+  assert.match(t, /Completed means every required field is filled/);
+  assert.match(t, /3-business-day clock pauses while waiting on missing required information/);
   assert.match(g, /\$199/); assert.doesNotMatch(g, /\$297/);
   for (const s of [t, g]) {
     assert.match(s, /I'm a virtual receptionist powered by AI that works for Roderick/);
