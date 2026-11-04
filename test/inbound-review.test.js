@@ -108,3 +108,38 @@ test('hangup waits for an in-flight calendar write before emailing its outcome',
   assert.equal(ended.length, 1);
   assert.equal(ended[0].job.caller_name, 'Dana');
 });
+
+test('parallel xAI tools return all outputs and wait for response.done before continuing', async () => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const cal = { configured: () => true, availability: async () => { await held; return []; } };
+  const ws = joinCall('parallel-tools', trs, { Socket, cal, log: quiet, mail: async () => {} });
+  ws.emit('open'); message(ws, { type: 'session.updated' });
+  const initial = ws.sent.filter(x => x.type === 'response.create').length;
+  message(ws, { type: 'response.function_call_arguments.done', response_id: 'r', name: 'save_caller_details', call_id: 'save', arguments: JSON.stringify(args()) });
+  message(ws, { type: 'response.function_call_arguments.done', response_id: 'r', name: 'check_callback_times', call_id: 'check', arguments: '{"caller_time_zone":"America/New_York"}' });
+  await turn();
+  assert.equal(ws.sent.filter(x => x.type === 'response.create').length, initial);
+  release(); await turn();
+  assert.equal(ws.sent.filter(x => x.item?.type === 'function_call_output').length, 2);
+  assert.equal(ws.sent.filter(x => x.type === 'response.create').length, initial, 'wait for end of tool-generating response');
+  message(ws, { type: 'response.done', response: { id: 'r' } });
+  assert.equal(ws.sent.filter(x => x.type === 'response.create').length, initial + 1);
+  message(ws, { type: 'response.done', response: { id: 'r' } });
+  assert.equal(ws.sent.filter(x => x.type === 'response.create').length, initial + 1);
+  ws.emit('close'); await turn();
+});
+
+test('response.done before a slow tool still waits for its output', async () => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const cal = { configured: () => true, availability: async () => { await held; return []; } };
+  const ws = joinCall('slow-tool', trs, { Socket, cal, log: quiet, mail: async () => {} });
+  ws.emit('open'); message(ws, { type: 'session.updated' });
+  message(ws, { type: 'response.function_call_arguments.done', response_id: 'r', name: 'check_callback_times', call_id: 'check', arguments: '{}' });
+  message(ws, { type: 'response.done', response: { id: 'r' } });
+  assert.equal(ws.sent.filter(x => x.type === 'response.create').length, 1);
+  release(); await turn();
+  assert.equal(ws.sent.filter(x => x.type === 'response.create').length, 2);
+  ws.emit('close'); await turn();
+});

@@ -84,6 +84,12 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
   let job = null;
   const transcript = [];
   const pendingInboundTools = new Set();
+  const inboundBatches = new Map();
+  const continueInbound = (key, batch) => {
+    if (batch.pending || !batch.done || finished || failed) return;
+    inboundBatches.delete(key);
+    try { ws.send(JSON.stringify({ type: "response.create" })); } catch { /* call may be ending */ }
+  };
   const inbound = line.inbound ? createInboundSession(line, { calendar: cal, log }) : null;
   const finish = async () => {
     if (finished || !ready) return;
@@ -138,14 +144,22 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
       }
       if (inbound && !finished && !failed && ev.type === "response.function_call_arguments.done" && inbound.handlers[ev.name]) {
         let args = {}; try { args = JSON.parse(ev.arguments || "{}"); } catch { /* handler copes */ }
-        const task = Promise.resolve().then(() => inbound.handlers[ev.name](args)).catch(e => { log.error(`[call ${callId}] ${ev.name} failed: ${e.message}`); return { error: true, instruction: "Save their details and say Roderick will reach out." }; }).then(output => {
+        const key = ev.response_id || "unscoped";
+        const batch = inboundBatches.get(key) || { pending: 0, done: !ev.response_id };
+        batch.pending++;
+        inboundBatches.set(key, batch);
+        const task = Promise.resolve().then(() => inbound.handlers[ev.name](args)).catch(e => { log.error(`[call ${callId}] inbound tool failed`); return { error: true, instruction: "Save their details and say Roderick will reach out." }; }).then(output => {
+          if (finished || failed) return;
           try {
             ws.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: ev.call_id, output: JSON.stringify(output) } }));
-            ws.send(JSON.stringify({ type: "response.create" }));
           } catch { /* call may be ending */ }
         });
         pendingInboundTools.add(task);
-        task.finally(() => pendingInboundTools.delete(task));
+        task.finally(() => {
+          pendingInboundTools.delete(task);
+          batch.pending--;
+          continueInbound(key, batch);
+        });
       }
       else if (ev.type === "response.function_call_arguments.done" && ev.name === SAVE_JOB_TOOL.name) {
         try { job = { ...(job || {}), ...JSON.parse(ev.arguments || "{}") }; } catch { /* keep previous */ }
@@ -153,6 +167,11 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
           ws.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: ev.call_id, output: JSON.stringify({ saved: true }) } }));
           ws.send(JSON.stringify({ type: "response.create" }));
         } catch { /* call may be ending */ }
+      }
+      if (inbound && ev.type === "response.done") {
+        const key = ev.response?.id || ev.response_id;
+        const batch = inboundBatches.get(key);
+        if (batch) { batch.done = true; continueInbound(key, batch); }
       }
       if (ev.type === "conversation.item.input_audio_transcription.completed" && ev.transcript) transcript.push({ role: "caller", text: String(ev.transcript).trim() });
       if (ev.type === "response.output_audio_transcript.done" && ev.transcript) transcript.push({ role: "agent", text: String(ev.transcript).trim() });
