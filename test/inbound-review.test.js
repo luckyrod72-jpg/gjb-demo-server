@@ -56,3 +56,32 @@ test('calendar failures never log provider or credential error text', async () =
   assert.doesNotMatch(logged.join('\n'), new RegExp(secretMarker));
   assert.match(logged.join('\n'), /calendar/);
 });
+
+test('overlapping booking tools on one call move the first event instead of creating a second', async () => {
+  const writes = [];
+  const calendar = { configured: () => true, book: async request => {
+    writes.push(request);
+    await turn();
+    return { booked: true, eventId: 'first-event', start: request.start, say: say(request.start, 'America/New_York') };
+  } };
+  const session = createInboundSession(trs, { calendar, log: quiet });
+  await Promise.all([
+    session.handlers.book_callback(args('2026-11-05T08:00')),
+    session.handlers.book_callback(args('2026-11-05T10:00')),
+  ]);
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1].replaceEventId, 'first-event');
+  assert.equal(session.state.booking.start, '2026-11-05T10:00');
+});
+
+test('overlapping repeated bookings on one call create only one event', async () => {
+  let writes = 0;
+  const calendar = { configured: () => true, book: async request => {
+    writes++; await turn();
+    return { booked: true, eventId: 'one', start: request.start, say: say(request.start, 'America/New_York') };
+  } };
+  const session = createInboundSession(trs, { calendar, log: quiet });
+  const results = await Promise.all([1, 2].map(() => session.handlers.book_callback(args('2026-11-05T08:00'))));
+  assert.equal(writes, 1);
+  assert.ok(results.every(r => r.booked));
+});

@@ -51,6 +51,15 @@ function createInboundSession(line, { calendar, log = console }) {
       } catch (e) { log.error("[calendar] operation failed; check calendar configuration and provider availability"); state.bookingFailed = true; return { booked: false, ...UNAVAILABLE }; }
     },
   };
+  // Serialize this call's mutations too: replaceEventId must be read after the
+  // preceding booking has completed, before entering the shared calendar queue.
+  let bookingQueue = Promise.resolve();
+  const book = handlers.book_callback;
+  handlers.book_callback = a => {
+    const result = bookingQueue.then(() => book(a));
+    bookingQueue = result.catch(() => {});
+    return result;
+  };
   return { handlers, state };
 }
 
