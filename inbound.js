@@ -36,7 +36,7 @@ function createInboundSession(line, { calendar, log = console }) {
       try {
         const days = await calendar.availability({ date: a.date, zone: a.caller_time_zone });
         return days.length ? { available: true, days } : { available: true, days: [], instruction: "Nothing free then. Try another day, or save their details and say Roderick will reach out." };
-      } catch (e) { log.error(`[calendar] ${e.message}`); state.bookingFailed = true; return UNAVAILABLE; }
+      } catch (e) { log.error("[calendar] operation failed; check calendar configuration and provider availability"); state.bookingFailed = true; return UNAVAILABLE; }
     },
     book_callback: async a => {
       keep(a);
@@ -48,7 +48,7 @@ function createInboundSession(line, { calendar, log = console }) {
         if (!r.booked) return { booked: false, reason: r.reason, instruction: "Offer another time from check_callback_times." };
         state.booking = r; state.bookingFailed = false;
         return { booked: true, say: r.say };
-      } catch (e) { log.error(`[calendar] ${e.message}`); state.bookingFailed = true; return { booked: false, ...UNAVAILABLE }; }
+      } catch (e) { log.error("[calendar] operation failed; check calendar configuration and provider availability"); state.bookingFailed = true; return { booked: false, ...UNAVAILABLE }; }
     },
   };
   return { handlers, state };

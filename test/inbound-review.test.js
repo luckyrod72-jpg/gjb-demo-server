@@ -42,3 +42,17 @@ test('a failed move retains the previous booking and identifies the calendar fai
   assert.match(summary.text, /Calendar problem.*verify/i);
   assert.doesNotMatch(summary.text, /10:00 AM Pacific/);
 });
+
+test('calendar failures never log provider or credential error text', async () => {
+  const logged = [];
+  const secretMarker = 'DO_NOT_LOG_PROVIDER_CREDENTIALS';
+  const calendar = { configured: () => true,
+    availability: async () => { throw new Error(secretMarker); },
+    book: async () => { throw new Error(secretMarker); } };
+  const session = createInboundSession(trs, { calendar, log: { error: s => logged.push(s) } });
+  await session.handlers.check_callback_times({ caller_time_zone: 'America/New_York' });
+  await session.handlers.book_callback(args('2026-11-05T08:00'));
+  assert.equal(logged.length, 2);
+  assert.doesNotMatch(logged.join('\n'), new RegExp(secretMarker));
+  assert.match(logged.join('\n'), /calendar/);
+});
