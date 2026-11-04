@@ -41,7 +41,7 @@ function createInboundSession(line, { calendar, log = console }) {
     book_callback: async a => {
       keep(a);
       if (!calendar.configured()) { state.bookingFailed = true; return { booked: false, ...UNAVAILABLE }; }
-      if (state.booking?.start === a.start) return { booked: true, say: state.booking.say, note: "already booked" };
+      if (state.booking?.start === a.start) return { booked: true, say: say(a.start, a.caller_time_zone), note: "already booked" };
       const biz = state.details.business_name || state.details.caller_name || "Unknown";
       try {
         const r = await calendar.book({ start: a.start, zone: a.caller_time_zone, title: `${offer} callback — ${biz}`, description: describe(state.details).map(([l, v]) => `${l}: ${v}`).join("\n"), replaceEventId: state.booking?.eventId });

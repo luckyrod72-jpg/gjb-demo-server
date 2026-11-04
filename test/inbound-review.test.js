@@ -143,3 +143,16 @@ test('response.done before a slow tool still waits for its output', async () => 
   assert.equal(ws.sent.filter(x => x.type === 'response.create').length, 2);
   ws.emit('close'); await turn();
 });
+
+test('confirming the same booking after correcting the caller zone uses the corrected zone', async () => {
+  let writes = 0;
+  const calendar = { configured: () => true, book: async request => {
+    writes++;
+    return { booked: true, eventId: 'one', start: request.start, say: say(request.start, request.zone) };
+  } };
+  const session = createInboundSession(trs, { calendar, log: quiet });
+  await session.handlers.book_callback(args('2026-11-05T08:00'));
+  const result = await session.handlers.book_callback({ ...args('2026-11-05T08:00'), caller_time_zone: 'America/Phoenix' });
+  assert.equal(result.say, 'Thursday, November 5, 9:00 AM Arizona');
+  assert.equal(writes, 1);
+});
