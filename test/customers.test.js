@@ -14,13 +14,13 @@ test('every file in customers/ is valid, and the 4 demo lines keep their numbers
   for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.json')))
     assert.deepEqual(validateCustomer(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))), [], f);
   const store = createStore({ dirs: [dir], log: quiet });
-  const want = { '+17026028867': 'plumbing', '+17027448394': 'hvac', '+17253537160': 'roofing', '+17253072525': 'electrical' };
+  const want = { '+17026028867': 'plumbing', '+17028277776': 'hvac', '+17027606871': 'roofing', '+17023740406': 'electrical' };
   for (const [n, trade] of Object.entries(want)) { assert.equal(store.byNumber(n).trade, trade); assert.equal(store.byNumber(n).demo, true); }
 });
 
 test('demo instructions are byte-identical to the pre-customer-store output', () => {
   const store = createStore({ dirs: [path.join(__dirname, '..', 'customers')], log: quiet });
-  for (const c of store.all()) {
+  for (const c of store.all().filter(c => c.demo)) {
     const old = KB('shared.md').replaceAll('[BUSINESS NAME]', c.business).replaceAll('[TRADE]', c.trade) + '\n\n' + KB(`${c.trade}.md`);
     assert.equal(buildInstructions(c), old, c.id);
   }

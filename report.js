@@ -52,7 +52,7 @@ async function sendDueReports({ customers, callLog, mail, env = process.env, now
   if (env.REPORTS_ENABLED !== "true" && !force) return [];
   const out = [];
   for (const c of customers.all()) {
-    if (c.demo || c.status === "paused" || !c.ownerEmail) continue;
+    if (c.demo || c.inbound || c.status === "paused" || !c.ownerEmail) continue;
     const p = localParts(now, c.timezone);
     // Due on the first day of each new billing period (signup-day cycle), from 8am local.
     const today = `${p.year}-${p.month}-${p.day}`;

@@ -1,6 +1,7 @@
 // Short form so it can be typed by hand in the Render web shell (pasting there inserts stray characters).
 // Usage: node scripts/reg.js plumbing   (or hvac, roofing, electrical = that trade's demo line)
 //        node scripts/reg.js <customer-id>   (a paying customer's number, from customers/<id>.json)
+// Roderick's inbound lines: node scripts/reg.js trs (or gjb)
 const { register } = require('./register-number.js');
 const { createStore, pickForRegistration } = require('../customers.js');
 const CIDRS = {
@@ -16,7 +17,7 @@ const number = info.phoneNumber;
 const carrier = info.carrier;
 const base = process.env.RENDER_EXTERNAL_URL || 'https://gjb-demo-server.onrender.com';
 const env = { ...process.env, XAI_PHONE_NUMBER: number, XAI_WEBHOOK_URL: base.replace(/\/$/, '') + '/webhooks/xai',
-  XAI_SIP_ALLOWED_ADDRESSES: CIDRS[carrier], XAI_NUMBER_NAME: `GJB ${info.demo ? 'demo' : 'customer'} - ${info.business}` };
+  XAI_SIP_ALLOWED_ADDRESSES: CIDRS[carrier], XAI_NUMBER_NAME: `GJB ${info.inbound ? 'inbound' : info.demo ? 'demo' : 'customer'} - ${info.business}` };
 const replace = process.argv.includes('--replace');
 async function removeExisting() {
   const h = { Authorization: `Bearer ${(process.env.XAI_API_KEY || '').trim()}` };
