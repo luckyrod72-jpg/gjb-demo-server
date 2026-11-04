@@ -32,7 +32,7 @@ function createInboundSession(line, { calendar, log = console }) {
   const handlers = {
     save_caller_details: async a => { keep(a); return { saved: true }; },
     check_callback_times: async a => {
-      if (!calendar.configured()) return UNAVAILABLE;
+      if (!calendar.configured()) { state.bookingFailed = true; return UNAVAILABLE; }
       try {
         const days = await calendar.availability({ date: a.date, zone: a.caller_time_zone });
         return days.length ? { available: true, days } : { available: true, days: [], instruction: "Nothing free then. Try another day, or save their details and say Roderick will reach out." };
@@ -62,7 +62,8 @@ function buildCallbackSummary({ line, state, transcript = [], callId }) {
   const when = state.booking ? say(state.booking.start, PT) : null;
   const tag = d.flag === "do_not_contact" ? "DO NOT CONTACT — " : d.flag === "customer_urgent" ? "CUSTOMER — urgent — " : d.flag === "spam" ? "Spam — " : "";
   const subject = `${tag}${offer} ${when ? `callback booked: ${who} — ${when}` : `inbound call: ${who} — no callback booked`}`;
-  const rows = [["Callback", when || (state.bookingFailed ? "NOT BOOKED: calendar problem, reach out to set a time" : "Not booked")], ...describe(d)];
+  const rows = [["Callback", when || (state.bookingFailed ? "NOT BOOKED: calendar problem, reach out to set a time" : "Not booked")],
+    ...(when && state.bookingFailed ? [["Calendar problem", "A later calendar operation failed; verify the existing booking and requested changes"]] : []), ...describe(d)];
   const script = transcript.map(t => [t.role === "caller" ? "Caller" : "Receptionist", t.text]);
   return {
     subject,
