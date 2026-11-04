@@ -27,7 +27,7 @@ const describe = (d = {}) => [
 
 function createInboundSession(line, { calendar, log = console }) {
   const offer = OFFER[line.inbound];
-  const state = { details: null, booking: null, bookingFailed: false };
+  const state = { details: null, booking: null, bookingFailed: false, bookingUncertain: false };
   const keep = a => { const { start, caller_time_zone, ...d } = a; state.details = { ...(state.details || {}), ...d }; };
   const handlers = {
     save_caller_details: async a => { keep(a); return { saved: true }; },
@@ -40,15 +40,16 @@ function createInboundSession(line, { calendar, log = console }) {
     },
     book_callback: async a => {
       keep(a);
+      if (state.bookingUncertain) return { booked: false, ...UNAVAILABLE };
       if (!calendar.configured()) { state.bookingFailed = true; return { booked: false, ...UNAVAILABLE }; }
       if (state.booking?.start === a.start) return { booked: true, say: say(a.start, a.caller_time_zone), note: "already booked" };
       const biz = state.details.business_name || state.details.caller_name || "Unknown";
       try {
         const r = await calendar.book({ start: a.start, zone: a.caller_time_zone, title: `${offer} callback — ${biz}`, description: describe(state.details).map(([l, v]) => `${l}: ${v}`).join("\n"), replaceEventId: state.booking?.eventId });
         if (!r.booked) return { booked: false, reason: r.reason, instruction: "Offer another time from check_callback_times." };
-        state.booking = r; state.bookingFailed = false;
+        state.booking = r; state.bookingFailed = false; state.bookingUncertain = false;
         return { booked: true, say: r.say };
-      } catch (e) { log.error("[calendar] operation failed; check calendar configuration and provider availability"); state.bookingFailed = true; return { booked: false, ...UNAVAILABLE }; }
+      } catch (e) { log.error("[calendar] operation failed; check calendar configuration and provider availability"); state.bookingFailed = true; state.bookingUncertain = !!e.bookingUncertain; return { booked: false, ...UNAVAILABLE }; }
     },
   };
   // Serialize this call's mutations too: replaceEventId must be read after the
@@ -68,10 +69,10 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 function buildCallbackSummary({ line, state, transcript = [], callId }) {
   const offer = OFFER[line.inbound], d = state.details || {};
   const who = d.business_name || d.caller_name || "Unknown caller";
-  const when = state.booking ? say(state.booking.start, PT) : null;
+  const when = state.booking && !state.bookingUncertain ? say(state.booking.start, PT) : null;
   const tag = d.flag === "do_not_contact" ? "DO NOT CONTACT — " : d.flag === "customer_urgent" ? "CUSTOMER — urgent — " : d.flag === "spam" ? "Spam — " : "";
-  const subject = `${tag}${offer} ${when ? `callback booked: ${who} — ${when}` : `inbound call: ${who} — no callback booked`}`;
-  const rows = [["Callback", when || (state.bookingFailed ? "NOT BOOKED: calendar problem, reach out to set a time" : "Not booked")],
+  const subject = state.bookingUncertain ? `${tag}${offer} inbound call: ${who} — callback needs verification` : `${tag}${offer} ${when ? `callback booked: ${who} — ${when}` : `inbound call: ${who} — no callback booked`}`;
+  const rows = [["Callback", state.bookingUncertain ? "NOT CONFIRMED: calendar write may have succeeded; verify Google Calendar before rebooking" : when || (state.bookingFailed ? "NOT BOOKED: calendar problem, reach out to set a time" : "Not booked")],
     ...(when && state.bookingFailed ? [["Calendar problem", "A later calendar operation failed; verify the existing booking and requested changes"]] : []), ...describe(d)];
   const script = transcript.map(t => [t.role === "caller" ? "Caller" : "Receptionist", t.text]);
   return {

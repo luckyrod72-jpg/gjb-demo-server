@@ -119,7 +119,14 @@ function createCalendar({ env = process.env, request = fetch, now = () => new Da
       if (!freeSlots([start], await busyBetween(from, to)).length) return { booked: false, reason: "that time was just taken" };
       const body = { summary: title, description, start: { dateTime: `${start}:00`, timeZone: PT }, end: { dateTime: `${ptParts(to).date}T${ptParts(to).hhmm}:00`, timeZone: PT } };
       const cal = encodeURIComponent(calendarId);
-      const ev = replaceEventId ? await api("PATCH", `/calendars/${cal}/events/${encodeURIComponent(replaceEventId)}`, body) : await api("POST", `/calendars/${cal}/events`, body);
+      let ev;
+      try {
+        ev = replaceEventId ? await api("PATCH", `/calendars/${cal}/events/${encodeURIComponent(replaceEventId)}`, body) : await api("POST", `/calendars/${cal}/events`, body);
+      } catch (e) {
+        // A timeout or lost response does not establish that Google rejected the write.
+        e.bookingUncertain = true;
+        throw e;
+      }
       return { booked: true, eventId: ev.id, start, say: say(start, zone) };
     };
     const result = queue.then(run, run);

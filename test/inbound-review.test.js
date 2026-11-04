@@ -156,3 +156,28 @@ test('confirming the same booking after correcting the caller zone uses the corr
   assert.equal(result.say, 'Thursday, November 5, 9:00 AM Arizona');
   assert.equal(writes, 1);
 });
+
+test('an uncertain Google write is reported for verification and cannot be blindly retried in the same call', async () => {
+  const crypto = require('node:crypto');
+  const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  let writes = 0;
+  const calendar = createCalendar({
+    env: { GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify({ client_email: 'test@example.invalid', private_key: privateKey }) },
+    now: () => new Date('2026-11-04T20:00:00Z'),
+    request: async url => {
+      if (url.includes('oauth2')) return { ok: true, json: async () => ({ access_token: 'test-only' }) };
+      if (url.endsWith('/freeBusy')) return { ok: true, json: async () => ({ calendars: { 'rod@leadsweep.co': { busy: [] } } }) };
+      writes++;
+      throw new Error('response lost after simulated commit');
+    },
+  });
+  const session = createInboundSession(trs, { calendar, log: quiet });
+  assert.equal((await session.handlers.book_callback(args('2026-11-05T08:00'))).booked, false);
+  const summary = buildCallbackSummary({ line: trs, state: session.state });
+  assert.match(summary.subject, /needs verification/);
+  assert.match(summary.text, /NOT CONFIRMED.*may have succeeded/);
+  assert.match(summary.text, /2125550100/);
+  assert.doesNotMatch(summary.text, /NOT BOOKED/);
+  assert.equal((await session.handlers.book_callback(args('2026-11-05T10:00'))).booked, false);
+  assert.equal(writes, 1, 'uncertain first write must be reconciled before attempting another');
+});
