@@ -145,7 +145,7 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
       if (inbound && !finished && !failed && ev.type === "response.function_call_arguments.done" && inbound.handlers[ev.name]) {
         let args = {}; try { args = JSON.parse(ev.arguments || "{}"); } catch { /* handler copes */ }
         const key = ev.response_id || "unscoped";
-        const batch = inboundBatches.get(key) || { pending: 0, done: !ev.response_id };
+        const batch = inboundBatches.get(key) || { pending: 0, done: false };
         batch.pending++;
         inboundBatches.set(key, batch);
         const task = Promise.resolve().then(() => inbound.handlers[ev.name](args)).catch(e => { log.error(`[call ${callId}] inbound tool failed`); return { error: true, instruction: "Save their details and say Roderick will reach out." }; }).then(output => {
@@ -169,7 +169,8 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
         } catch { /* call may be ending */ }
       }
       if (inbound && ev.type === "response.done") {
-        const key = ev.response?.id || ev.response_id;
+        const responseKey = ev.response?.id || ev.response_id;
+        const key = inboundBatches.has(responseKey) ? responseKey : "unscoped";
         const batch = inboundBatches.get(key);
         if (batch) { batch.done = true; continueInbound(key, batch); }
       }

@@ -181,3 +181,18 @@ test('an uncertain Google write is reported for verification and cannot be blind
   assert.equal((await session.handlers.book_callback(args('2026-11-05T10:00'))).booked, false);
   assert.equal(writes, 1, 'uncertain first write must be reconciled before attempting another');
 });
+
+test('xAI batches without response IDs also wait across message turns until response.done', async () => {
+  const ws = joinCall('unscoped-tools', trs, { Socket, cal: { configured: () => false }, log: quiet, mail: async () => {} });
+  ws.emit('open'); message(ws, { type: 'session.updated' });
+  message(ws, { type: 'response.function_call_arguments.done', name: 'save_caller_details', call_id: 'first', arguments: JSON.stringify(args()) });
+  await turn();
+  assert.equal(ws.sent.filter(x => x.type === 'response.create').length, 1);
+  message(ws, { type: 'response.function_call_arguments.done', name: 'check_callback_times', call_id: 'second', arguments: '{}' });
+  await turn();
+  assert.equal(ws.sent.filter(x => x.type === 'response.create').length, 1);
+  message(ws, { type: 'response.done' });
+  assert.equal(ws.sent.filter(x => x.type === 'response.create').length, 2);
+  assert.equal(ws.sent.filter(x => x.item?.type === 'function_call_output').length, 2);
+  ws.emit('close'); await turn();
+});

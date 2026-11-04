@@ -118,7 +118,10 @@ test('booking a disallowed time never reaches the calendar', async () => {
 
 // ---- a whole call
 class Socket extends EventEmitter { constructor() { super(); this.sent = []; } send(x) { this.sent.push(JSON.parse(x)); } terminate() {} }
-const msg = (ws, o) => ws.emit('message', Buffer.from(JSON.stringify(o)));
+const msg = (ws, o) => {
+  ws.emit('message', Buffer.from(JSON.stringify(o)));
+  if (o.type === 'response.function_call_arguments.done') ws.emit('message', Buffer.from(JSON.stringify({ type: 'response.done' })));
+};
 const tick = () => new Promise(r => setTimeout(r, 30));
 const output = (ws, id) => JSON.parse(ws.sent.find(e => e.item?.call_id === id).item.output);
 
