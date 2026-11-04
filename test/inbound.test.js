@@ -181,8 +181,8 @@ test('demo lines are unchanged: same single tool, no inbound handling', () => {
 });
 
 // ---- TeXML flow
-function server(e) {
-  const app = express(); app.use('/telnyx', texmlRouter({ store, env: { RENDER_EXTERNAL_URL: 'https://h.test', ...e }, log: quiet }));
+function server(e, options = {}) {
+  const app = express(); app.use('/telnyx', texmlRouter({ store, env: { RENDER_EXTERNAL_URL: 'https://h.test', ...e }, log: quiet, ...options }));
   return new Promise(r => { const s = app.listen(0, () => r(s)); });
 }
 async function hit(s, p, body) {
@@ -225,4 +225,35 @@ test('TeXML: voicemail or no answer falls to the receptionist; only pressing 1 k
   assert.doesNotMatch((await hit(s, `sekret/screen-result?${q}`, { Digits: '1' })).text, /Hangup/);
   assert.match((await hit(s, `sekret/after-dial?${q}`, { DialCallStatus: 'completed' })).text, /Hangup/);
   s.close();
+});
+
+
+test('TeXML: repeated after-dial callbacks retain press-1 acceptance without extending its TTL', async t => {
+  let clock = Date.now();
+  t.mock.method(Date, 'now', () => clock);
+  const s = await server({ INBOUND_TEXML_TOKEN: 'sekret' }, { acceptedTtlMs: 1000 });
+  t.after(() => new Promise(resolve => s.close(resolve)));
+  const q = 'call=retry&line=inbound-trs';
+  await hit(s, `sekret/screen-result?${q}`, { Digits: '1' });
+  const acceptedAt = clock;
+  for (const elapsed of [0, 500, 999]) {
+    clock = acceptedAt + elapsed;
+    const result = await hit(s, `sekret/after-dial?${q}`, { DialCallStatus: 'completed' });
+    assert.match(result.text, /<Hangup\/>/, `acceptance lost before TTL at ${elapsed}ms`);
+    assert.doesNotMatch(result.text, /<Sip>/);
+  }
+  clock += 1;
+  assert.match((await hit(s, `sekret/after-dial?${q}`)).text, /<Sip>/, 'reads must not extend acceptance past its original TTL');
+});
+
+test('TeXML: acceptance expires on after-dial even with no intervening screening requests', async t => {
+  let clock = Date.now();
+  t.mock.method(Date, 'now', () => clock);
+  const s = await server({ INBOUND_TEXML_TOKEN: 'sekret' }, { acceptedTtlMs: 1000 });
+  t.after(() => new Promise(resolve => s.close(resolve)));
+  const q = 'call=expired&line=inbound-gjb';
+  await hit(s, `sekret/screen-result?${q}`, { Digits: '1' });
+  clock += 1001;
+  assert.match((await hit(s, `sekret/after-dial?${q}`)).text, /<Sip>/);
+  assert.match((await hit(s, `sekret/after-dial?${q}`)).text, /<Sip>/);
 });

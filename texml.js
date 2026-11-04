@@ -50,7 +50,7 @@ function texmlRouter({ store, env = process.env, log = console, acceptedTtlMs = 
   router.all("/:token/screen-result", (req, res) => {
     if (String(req.p.Digits) !== "1") return send(res, HANGUP);
     const now = Date.now();
-    for (const [k, t] of accepted) if (now - t > acceptedTtlMs) accepted.delete(k);
+    for (const [k, t] of accepted) if (now - t >= acceptedTtlMs) accepted.delete(k);
     accepted.set(String(req.p.call), now);
     send(res, doc("")); // empty document: bridge Rod to the caller
   });
@@ -61,7 +61,10 @@ function texmlRouter({ store, env = process.env, log = console, acceptedTtlMs = 
     const line = lineById(req.p.line);
     if (!line) return send(res, HANGUP);
     const call = String(req.p.call);
-    if (accepted.delete(call)) return send(res, HANGUP);
+    const acceptedAt = accepted.get(call);
+    // Telnyx can retry this callback; reads retain the original acceptance TTL.
+    if (acceptedAt !== undefined && Date.now() - acceptedAt < acceptedTtlMs) return send(res, HANGUP);
+    accepted.delete(call); // expired records do not require another screening request to clear
     send(res, toReceptionist(line.phoneNumber));
   });
   return router;
