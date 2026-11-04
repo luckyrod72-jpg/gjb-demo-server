@@ -85,3 +85,26 @@ test('overlapping repeated bookings on one call create only one event', async ()
   assert.equal(writes, 1);
   assert.ok(results.every(r => r.booked));
 });
+
+test('hangup waits for an in-flight calendar write before emailing its outcome', async () => {
+  let complete, started;
+  const began = new Promise(resolve => { started = resolve; });
+  const result = new Promise(resolve => { complete = resolve; });
+  const mails = [], ended = [];
+  const cal = { configured: () => true, book: async request => {
+    started(); await result;
+    return { booked: true, eventId: 'saved', start: request.start, say: say(request.start, 'America/New_York') };
+  } };
+  const ws = joinCall('hangup-during-booking', trs, { Socket, cal, log: quiet,
+    mail: async summary => mails.push(summary), onEnd: async info => ended.push(info) });
+  ws.emit('open'); message(ws, { type: 'session.updated' });
+  message(ws, { type: 'response.function_call_arguments.done', name: 'book_callback', call_id: 'book', arguments: JSON.stringify(args('2026-11-05T08:00')) });
+  await began;
+  ws.emit('close'); await turn();
+  assert.equal(mails.length, 0, 'do not prematurely email no booking');
+  complete(); await turn(); await turn();
+  assert.equal(mails.length, 1);
+  assert.match(mails[0].subject, /TRS callback booked/);
+  assert.equal(ended.length, 1);
+  assert.equal(ended[0].job.caller_name, 'Dana');
+});

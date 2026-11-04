@@ -83,12 +83,16 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
   const startedAt = Date.now();
   let job = null;
   const transcript = [];
+  const pendingInboundTools = new Set();
   const inbound = line.inbound ? createInboundSession(line, { calendar: cal, log }) : null;
   const finish = async () => {
     if (finished || !ready) return;
     finished = true;
     const endedAt = Date.now();
-    if (inbound) job = inbound.state.details;
+    if (inbound) {
+      await Promise.allSettled([...pendingInboundTools]);
+      job = inbound.state.details;
+    }
     log.log?.(`[call ${callId}] ended after ${Math.round((endedAt - startedAt) / 1000)}s (${line.business}); job captured: ${!!job}`);
     // The owner's job email goes first; the call log must never delay or block it.
     if (job || transcript.some(t => t.role === "caller")) { // silent/hang-up call: nothing to email
@@ -132,14 +136,16 @@ function joinCall(callId, line, { Socket = WebSocket, request = fetch, timeoutMs
         ready = true; clearTimeout(timer);
         try { ws.send(JSON.stringify({ type: "response.create" })); } catch { void fail(); }
       }
-      if (inbound && ev.type === "response.function_call_arguments.done" && inbound.handlers[ev.name]) {
+      if (inbound && !finished && !failed && ev.type === "response.function_call_arguments.done" && inbound.handlers[ev.name]) {
         let args = {}; try { args = JSON.parse(ev.arguments || "{}"); } catch { /* handler copes */ }
-        Promise.resolve().then(() => inbound.handlers[ev.name](args)).catch(e => { log.error(`[call ${callId}] ${ev.name} failed: ${e.message}`); return { error: true, instruction: "Save their details and say Roderick will reach out." }; }).then(output => {
+        const task = Promise.resolve().then(() => inbound.handlers[ev.name](args)).catch(e => { log.error(`[call ${callId}] ${ev.name} failed: ${e.message}`); return { error: true, instruction: "Save their details and say Roderick will reach out." }; }).then(output => {
           try {
             ws.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: ev.call_id, output: JSON.stringify(output) } }));
             ws.send(JSON.stringify({ type: "response.create" }));
           } catch { /* call may be ending */ }
         });
+        pendingInboundTools.add(task);
+        task.finally(() => pendingInboundTools.delete(task));
       }
       else if (ev.type === "response.function_call_arguments.done" && ev.name === SAVE_JOB_TOOL.name) {
         try { job = { ...(job || {}), ...JSON.parse(ev.arguments || "{}") }; } catch { /* keep previous */ }
